@@ -10,10 +10,10 @@ Generate structured emergency SMS and email communications from confirmed incide
 npm install
 ```
 
-2. Create a `.env.local` file with your OpenAI API key:
+2. Create a `.env.local` file with your Gemini API key (get one free at [Google AI Studio](https://aistudio.google.com/apikey)):
 
 ```
-OPENAI_API_KEY=your_openai_api_key_here
+GEMINI_API_KEY=your_gemini_api_key_here
 ```
 
 3. Run the development server:
@@ -29,8 +29,8 @@ npm run dev
 - Next.js 16 (App Router)
 - TypeScript
 - Tailwind CSS
-- OpenAI API (gpt-4o-mini)
+- Google Gemini API (gemini-2.0-flash, free tier)
 
 ## Deploy to Vercel
 
-Set the `OPENAI_API_KEY` environment variable in your Vercel project settings, then deploy.
+Set the `GEMINI_API_KEY` environment variable in your Vercel project settings, then deploy.
