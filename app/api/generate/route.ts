@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { GenerateResponse } from "@/app/types";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const DEFAULT_MODEL = "mistralai/mistral-7b-instruct:free";
+const DEFAULT_MODEL = "mistralai/mistral-small-3.1-24b-instruct:free";
 
 function mockResponse(
   incidentType: string,
