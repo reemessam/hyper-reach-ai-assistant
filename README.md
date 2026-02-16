@@ -10,10 +10,12 @@ Generate structured emergency SMS and email communications from confirmed incide
 npm install
 ```
 
-2. Create a `.env.local` file with your Gemini API key (get one free at [Google AI Studio](https://aistudio.google.com/apikey)):
+2. Create a `.env.local` file with your OpenRouter API key (get one free at [openrouter.ai](https://openrouter.ai/keys)):
 
 ```
-GEMINI_API_KEY=your_gemini_api_key_here
+OPENROUTER_API_KEY=your_openrouter_api_key_here
+OPENROUTER_MODEL=mistralai/mistral-7b-instruct:free
+LLM_MOCK=false
 ```
 
 3. Run the development server:
@@ -29,8 +31,8 @@ npm run dev
 - Next.js 16 (App Router)
 - TypeScript
 - Tailwind CSS
-- Google Gemini API (gemini-2.0-flash, free tier)
+- OpenRouter API (mistral-7b-instruct:free by default)
 
 ## Deploy to Vercel
 
-Set the `GEMINI_API_KEY` environment variable in your Vercel project settings, then deploy.
+Set the `OPENROUTER_API_KEY` environment variable in your Vercel project settings, then deploy. Set `LLM_MOCK=true` to test without an API key.

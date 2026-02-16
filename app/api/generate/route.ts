@@ -1,19 +1,60 @@
 import { NextResponse } from "next/server";
 import type { GenerateResponse } from "@/app/types";
 
-const GEMINI_URL =
-  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent";
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const DEFAULT_MODEL = "mistralai/mistral-7b-instruct:free";
 
-export async function POST(request: Request) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "Server configuration error: missing API key" },
-      { status: 500 }
-    );
+function mockResponse(
+  incidentType: string,
+  location: string,
+  confirmedFacts: string
+): GenerateResponse {
+  return {
+    sms: `ALERT: ${incidentType} at ${location}. ${confirmedFacts.slice(0, 60)}. Follow official guidance.`.slice(
+      0,
+      160
+    ),
+    email: {
+      subject: `Emergency Alert: ${incidentType} at ${location}`,
+      body: `This is an official emergency notification.\n\nIncident: ${incidentType}\nLocation: ${location}\n\nConfirmed details:\n${confirmedFacts}\n\nPlease follow all official instructions and monitor local news for updates.`,
+    },
+  };
+}
+
+function parseJsonResponse(content: string): GenerateResponse | null {
+  // First, try direct parse
+  try {
+    const direct = JSON.parse(content);
+    if (direct.sms && direct.email?.subject && direct.email?.body) {
+      return direct as GenerateResponse;
+    }
+  } catch {
+    // fall through to extraction
   }
 
-  let body: { incidentType?: string; location?: string; severity?: string; confirmedFacts?: string };
+  // Extract first {...} block (handles markdown code blocks or surrounding text)
+  const jsonMatch = content.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) return null;
+
+  try {
+    const extracted = JSON.parse(jsonMatch[0]);
+    if (extracted.sms && extracted.email?.subject && extracted.email?.body) {
+      return extracted as GenerateResponse;
+    }
+  } catch {
+    // fall through
+  }
+
+  return null;
+}
+
+export async function POST(request: Request) {
+  let body: {
+    incidentType?: string;
+    location?: string;
+    severity?: string;
+    confirmedFacts?: string;
+  };
   try {
     body = await request.json();
   } catch {
@@ -27,10 +68,30 @@ export async function POST(request: Request) {
 
   if (!incidentType || !location || !confirmedFacts) {
     return NextResponse.json(
-      { error: "All fields are required: incidentType, location, confirmedFacts" },
+      {
+        error:
+          "All fields are required: incidentType, location, confirmedFacts",
+      },
       { status: 400 }
     );
   }
+
+  // Mock mode — deterministic response, no API call
+  if (process.env.LLM_MOCK === "true") {
+    return NextResponse.json(
+      mockResponse(incidentType, location, confirmedFacts)
+    );
+  }
+
+  const apiKey = process.env.OPENROUTER_API_KEY;
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: "Server configuration error: missing API key" },
+      { status: 500 }
+    );
+  }
+
+  const model = process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
 
   const severityLine = severity ? `\nSeverity: ${severity}` : "";
 
@@ -56,30 +117,39 @@ Rules:
 - Do not speculate or add unverified information${severity ? `\n- Adjust urgency of tone to match the severity level (${severity})` : ""}
 - Return ONLY the JSON object, no other text`;
 
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${apiKey}`,
+    "Content-Type": "application/json",
+  };
+  if (process.env.APP_URL) {
+    headers["HTTP-Referer"] = process.env.APP_URL;
+  }
+  if (process.env.APP_NAME) {
+    headers["X-Title"] = process.env.APP_NAME;
+  }
+
   try {
-    const res = await fetch(`${GEMINI_URL}?key=${apiKey}`, {
+    const res = await fetch(OPENROUTER_URL, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({
-        systemInstruction: {
-          parts: [
-            {
-              text: "You are an emergency communication assistant. Use only confirmed facts. Do not invent details. Write clearly and concisely. Always return valid JSON.",
-            },
-          ],
-        },
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: {
-          temperature: 0.3,
-          responseMimeType: "application/json",
-        },
+        model,
+        temperature: 0.3,
+        messages: [
+          {
+            role: "system",
+            content:
+              "You are an emergency communication assistant. Use only confirmed facts. Do not invent details. Write clearly and concisely. Always return valid JSON.",
+          },
+          { role: "user", content: prompt },
+        ],
       }),
     });
 
     if (!res.ok) {
       const errBody = await res.text();
       return NextResponse.json(
-        { error: `Gemini API error (${res.status}): ${errBody}` },
+        { error: `OpenRouter API error (${res.status}): ${errBody}` },
         { status: 502 }
       );
     }
@@ -87,42 +157,25 @@ Rules:
     const data = await res.json();
 
     const content: string | undefined =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text;
+      data?.choices?.[0]?.message?.content;
 
     if (!content) {
       return NextResponse.json(
-        { error: "No response from AI model" },
-        { status: 502 }
+        mockResponse(incidentType, location, confirmedFacts)
       );
     }
 
-    // Extract JSON from the response (handle markdown code blocks)
-    const jsonMatch = content.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return NextResponse.json(
-        { error: "Failed to parse AI response" },
-        { status: 500 }
-      );
-    }
+    const parsed = parseJsonResponse(content);
 
-    const parsed: GenerateResponse = JSON.parse(jsonMatch[0]);
-
-    // Validate the expected shape
-    if (!parsed.sms || !parsed.email?.subject || !parsed.email?.body) {
+    if (!parsed) {
+      // Fallback to mock when JSON parsing fails entirely
       return NextResponse.json(
-        { error: "AI response missing required fields" },
-        { status: 500 }
+        mockResponse(incidentType, location, confirmedFacts)
       );
     }
 
     return NextResponse.json(parsed);
-  } catch (error) {
-    if (error instanceof SyntaxError) {
-      return NextResponse.json(
-        { error: "Failed to parse AI response as JSON" },
-        { status: 500 }
-      );
-    }
+  } catch {
     return NextResponse.json(
       { error: "An unexpected error occurred" },
       { status: 500 }
