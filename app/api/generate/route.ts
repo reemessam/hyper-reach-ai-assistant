@@ -282,7 +282,7 @@ export async function POST(request: Request) {
         const errBody = await res.text();
         return NextResponse.json(
           { error: `OpenRouter API error (${res.status}): ${errBody}` },
-          { status: 502 }
+          { status: 500 }
         );
       }
 
@@ -325,7 +325,7 @@ export async function POST(request: Request) {
       {
         error: `OpenRouter API rate limited after ${MAX_RETRIES} retries: ${lastError}`,
       },
-      { status: 502 }
+      { status: 500 }
     );
   } catch {
     return NextResponse.json(

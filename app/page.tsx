@@ -9,17 +9,19 @@ export default function Home() {
   const [location, setLocation] = useState("");
   const [severity, setSeverity] = useState<SeverityLevel>("Medium");
   const [confirmedFacts, setConfirmedFacts] = useState("");
+  const [audience, setAudience] = useState("");
+  const [readingLevel, setReadingLevel] = useState(6);
 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<GenerateResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
 
     if (!location.trim() || !confirmedFacts.trim()) {
-      setError("Please fill in all fields.");
+      setError("Please fill in all required fields.");
       return;
     }
 
@@ -31,7 +33,14 @@ export default function Home() {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ incidentType, location, severity, confirmedFacts }),
+        body: JSON.stringify({
+          incidentType,
+          location,
+          severity,
+          confirmedFacts,
+          audience: audience.trim() || undefined,
+          readingLevel,
+        }),
       });
 
       const data = await res.json();
@@ -49,27 +58,26 @@ export default function Home() {
     }
   }
 
-  async function copyToClipboard(text: string) {
+  async function copyToClipboard(text: string, field: string) {
     try {
       await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
     } catch {
-      // Fallback for older browsers
       const textarea = document.createElement("textarea");
       textarea.value = text;
       document.body.appendChild(textarea);
       textarea.select();
       document.execCommand("copy");
       document.body.removeChild(textarea);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
     }
   }
 
   return (
     <main className="min-h-screen bg-gray-50 py-8 px-4">
-      <div className="max-w-2xl mx-auto">
+      <div className="max-w-3xl mx-auto">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900">
             AI Crisis Message Generator
@@ -138,6 +146,42 @@ export default function Home() {
               </select>
             </div>
 
+            {/* Audience & Reading Level row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="audience" className="block text-sm font-medium text-gray-700 mb-1">
+                  Audience <span className="text-gray-400 font-normal">(optional)</span>
+                </label>
+                <input
+                  id="audience"
+                  type="text"
+                  value={audience}
+                  onChange={(e) => setAudience(e.target.value)}
+                  placeholder="e.g., residents, employees, students"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                />
+              </div>
+              <div>
+                <label htmlFor="readingLevel" className="block text-sm font-medium text-gray-700 mb-1">
+                  Reading Level <span className="text-gray-400 font-normal">(grade {readingLevel})</span>
+                </label>
+                <input
+                  id="readingLevel"
+                  type="range"
+                  min={1}
+                  max={12}
+                  value={readingLevel}
+                  onChange={(e) => setReadingLevel(Number(e.target.value))}
+                  className="w-full mt-2 accent-blue-600"
+                />
+                <div className="flex justify-between text-xs text-gray-400 mt-1">
+                  <span>1</span>
+                  <span>6</span>
+                  <span>12</span>
+                </div>
+              </div>
+            </div>
+
             {/* Confirmed Facts */}
             <div>
               <label htmlFor="confirmedFacts" className="block text-sm font-medium text-gray-700 mb-1">
@@ -175,9 +219,9 @@ export default function Home() {
         {result && (
           <div className="space-y-4">
             {/* SMS Result */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-lg font-semibold text-gray-900">SMS Message</h2>
+            <ResultCard
+              title="SMS Message"
+              badge={
                 <span
                   className={`text-xs font-medium px-2 py-1 rounded-full ${
                     result.sms.length <= 160
@@ -187,21 +231,40 @@ export default function Home() {
                 >
                   {result.sms.length}/160 chars
                 </span>
-              </div>
+              }
+              onCopy={() => copyToClipboard(result.sms, "sms")}
+              copied={copiedField === "sms"}
+              copyLabel="Copy SMS"
+            >
               <p className="text-gray-800 bg-gray-50 rounded-md p-3 text-sm font-mono">
                 {result.sms}
               </p>
-              <button
-                onClick={() => copyToClipboard(result.sms)}
-                className="mt-3 text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
-              >
-                {copied ? "Copied!" : "Copy SMS"}
-              </button>
-            </div>
+            </ResultCard>
+
+            {/* Voice Script */}
+            <ResultCard
+              title="Voice Script"
+              onCopy={() => copyToClipboard(result.voice_script, "voice")}
+              copied={copiedField === "voice"}
+              copyLabel="Copy Script"
+            >
+              <div className="bg-gray-50 rounded-md p-3 text-sm text-gray-800 whitespace-pre-line">
+                {result.voice_script}
+              </div>
+            </ResultCard>
 
             {/* Email Result */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-3">Email</h2>
+            <ResultCard
+              title="Email"
+              onCopy={() =>
+                copyToClipboard(
+                  `Subject: ${result.email.subject}\n\n${result.email.body}`,
+                  "email"
+                )
+              }
+              copied={copiedField === "email"}
+              copyLabel="Copy Email"
+            >
               <div className="space-y-3">
                 <div>
                   <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
@@ -218,10 +281,111 @@ export default function Home() {
                   </div>
                 </div>
               </div>
+            </ResultCard>
+
+            {/* Social Post */}
+            <ResultCard
+              title="Social Media Post"
+              onCopy={() => copyToClipboard(result.social_post, "social")}
+              copied={copiedField === "social"}
+              copyLabel="Copy Post"
+            >
+              <div className="bg-gray-50 rounded-md p-3 text-sm text-gray-800 whitespace-pre-line">
+                {result.social_post}
+              </div>
+            </ResultCard>
+
+            {/* Spanish SMS Translation */}
+            <ResultCard
+              title="Spanish SMS Translation"
+              badge={
+                <span
+                  className={`text-xs font-medium px-2 py-1 rounded-full ${
+                    result.translations.es_sms.length <= 160
+                      ? "bg-green-100 text-green-700"
+                      : "bg-red-100 text-red-700"
+                  }`}
+                >
+                  {result.translations.es_sms.length}/160 chars
+                </span>
+              }
+              onCopy={() => copyToClipboard(result.translations.es_sms, "es_sms")}
+              copied={copiedField === "es_sms"}
+              copyLabel="Copy Spanish SMS"
+            >
+              <p className="text-gray-800 bg-gray-50 rounded-md p-3 text-sm font-mono">
+                {result.translations.es_sms}
+              </p>
+            </ResultCard>
+
+            {/* Metadata row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Readability Grade */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-2">Readability</h2>
+                <p className="text-3xl font-bold text-blue-600">
+                  Grade {result.readability_grade_estimate}
+                </p>
+              </div>
+
+              {/* Compliance Flags */}
+              <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+                <h2 className="text-lg font-semibold text-gray-900 mb-2">Compliance Flags</h2>
+                {result.compliance_flags.length === 0 ? (
+                  <p className="text-sm text-green-600 font-medium">No compliance issues detected</p>
+                ) : (
+                  <ul className="space-y-1">
+                    {result.compliance_flags.map((flag, i) => (
+                      <li key={i} className="text-sm text-amber-700 flex items-start gap-1.5">
+                        <span className="text-amber-500 mt-0.5 shrink-0">!</span>
+                        {flag}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </div>
+
+            {/* Follow-Up Suggestion */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+              <h2 className="text-lg font-semibold text-blue-900 mb-2">Suggested Follow-Up</h2>
+              <p className="text-sm text-blue-800">{result.follow_up_suggestion}</p>
             </div>
           </div>
         )}
       </div>
     </main>
+  );
+}
+
+function ResultCard({
+  title,
+  badge,
+  onCopy,
+  copied,
+  copyLabel,
+  children,
+}: {
+  title: string;
+  badge?: React.ReactNode;
+  onCopy: () => void;
+  copied: boolean;
+  copyLabel: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+        {badge}
+      </div>
+      {children}
+      <button
+        onClick={onCopy}
+        className="mt-3 text-sm text-blue-600 hover:text-blue-800 font-medium transition-colors"
+      >
+        {copied ? "Copied!" : copyLabel}
+      </button>
+    </div>
   );
 }
