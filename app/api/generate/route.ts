@@ -10,55 +10,124 @@ const SYSTEM_PROMPT = `You are an AI Crisis Communication Copilot for emergency 
 
 Rules:
 - Use ONLY confirmed facts.
-- Do NOT invent details.
+- Never invent details.
 - Avoid speculation or blame.
-- Include clear action steps when appropriate.
-- Use plain language appropriate to the requested reading level.
+- Include requiredAction explicitly in every channel if provided.
+- If requiredAction is missing, add a compliance flag.
+- Adapt tone based on:
+    Calm → reassuring, steady
+    Neutral → clear and direct
+    Urgent → concise and commanding
+- Use plain language at the requested reading level.
 - SMS must be <= 160 characters.
-- Return ONLY valid JSON matching the schema exactly.`;
+- Include sender name when appropriate.
+- Include timestamp naturally in longer channels (voice/email/social).
+- Return ONLY valid JSON matching schema exactly.`;
 
 interface RequestBody {
   incidentType?: string;
   location?: string;
   severity?: string;
   confirmedFacts?: string;
+  requiredAction?: string;
   audience?: string;
   readingLevel?: number;
+  tone?: string;
+  sender?: string;
+}
+
+function generateTimestamps(): { timestamp_iso: string; formatted_time: string } {
+  const now = new Date();
+  return {
+    timestamp_iso: now.toISOString(),
+    formatted_time: now.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    }),
+  };
+}
+
+function buildComplianceFlags(
+  requiredAction: string | undefined,
+  confirmedFacts: string
+): string[] {
+  const flags: string[] = [];
+  if (!requiredAction) {
+    flags.push("Missing required action step.");
+  }
+  if (confirmedFacts.length < 15) {
+    flags.push("Insufficient confirmed details provided.");
+  }
+  return flags;
 }
 
 function mockResponse(
   incidentType: string,
   location: string,
   confirmedFacts: string,
+  requiredAction: string | undefined,
   audience: string,
-  readingLevel: number
+  readingLevel: number,
+  tone: string,
+  sender: string
 ): GenerateResponse {
-  const sms = `ALERT: ${incidentType} at ${location}. ${confirmedFacts.slice(0, 60)}. Follow official guidance.`.slice(
+  const { timestamp_iso, formatted_time } = generateTimestamps();
+
+  const actionPart = requiredAction
+    ? ` ${requiredAction}`
+    : " Follow official guidance.";
+
+  const tonePrefix =
+    tone === "Urgent"
+      ? "URGENT: "
+      : tone === "Calm"
+        ? ""
+        : "";
+
+  const sms = `${tonePrefix}ALERT: ${incidentType} at ${location}.${actionPart}`.slice(
     0,
     160
   );
 
+  const voiceToneIntro =
+    tone === "Calm"
+      ? "Please remain calm. "
+      : tone === "Urgent"
+        ? "This is an urgent message. "
+        : "";
+
   return {
     sms,
-    voice_script: `Attention ${audience}. This is an emergency alert. A ${incidentType} has been reported at ${location}. ${confirmedFacts} Please follow all official instructions and stay tuned for updates.`,
+    voice_script: `${voiceToneIntro}Attention ${audience}. This is an emergency alert from ${sender} at ${formatted_time}. A ${incidentType} has been reported at ${location}. ${confirmedFacts}${requiredAction ? ` ${requiredAction}` : ""} Please follow all official instructions and stay tuned for updates.`,
     email: {
-      subject: `Emergency Alert: ${incidentType} at ${location}`,
-      body: `This is an official emergency notification.\n\nIncident: ${incidentType}\nLocation: ${location}\n\nConfirmed details:\n${confirmedFacts}\n\nPlease follow all official instructions and monitor local news for updates.`,
+      subject: `${tone === "Urgent" ? "URGENT - " : ""}Emergency Alert: ${incidentType} at ${location}`,
+      body: `This is an official emergency notification from ${sender}.\nIssued: ${formatted_time}\n\nIncident: ${incidentType}\nLocation: ${location}\n\nConfirmed details:\n${confirmedFacts}${requiredAction ? `\n\nRequired Action:\n${requiredAction}` : ""}\n\nPlease follow all official instructions and monitor local news for updates.`,
     },
-    social_post: `⚠️ EMERGENCY: ${incidentType} reported at ${location}. ${confirmedFacts.slice(0, 100)} Follow official guidance. More updates to follow.`,
+    social_post: `${tone === "Urgent" ? "🚨" : "⚠️"} EMERGENCY: ${incidentType} reported at ${location} (${formatted_time}). ${confirmedFacts.slice(0, 80)}${requiredAction ? ` ${requiredAction}` : " Follow official guidance."} — ${sender}`,
     translations: {
-      es_sms: `ALERTA: ${incidentType} en ${location}. Siga las instrucciones oficiales.`.slice(
+      es_sms: `ALERTA: ${incidentType} en ${location}.${requiredAction ? ` ${requiredAction}` : " Siga las instrucciones oficiales."}`.slice(
         0,
         160
       ),
     },
     readability_grade_estimate: readingLevel,
-    compliance_flags: [],
+    compliance_flags: buildComplianceFlags(requiredAction, confirmedFacts),
     follow_up_suggestion: `Send a follow-up message in 30 minutes with updated status on the ${incidentType} at ${location}.`,
+    metadata: {
+      timestamp_iso,
+      formatted_time,
+      sender,
+      tone,
+    },
   };
 }
 
-function sanitizeResponse(raw: Record<string, unknown>): GenerateResponse {
+function sanitizeResponse(
+  raw: Record<string, unknown>,
+  metadata: GenerateResponse["metadata"],
+  serverComplianceFlags: string[]
+): GenerateResponse {
   const sms = typeof raw.sms === "string" ? raw.sms.slice(0, 160) : "";
 
   const voice_script =
@@ -89,9 +158,17 @@ function sanitizeResponse(raw: Record<string, unknown>): GenerateResponse {
       ? raw.readability_grade_estimate
       : 6;
 
-  const compliance_flags = Array.isArray(raw.compliance_flags)
+  const aiFlags = Array.isArray(raw.compliance_flags)
     ? (raw.compliance_flags.filter((f) => typeof f === "string") as string[])
     : [];
+
+  // Merge AI-returned flags with server-side compliance flags (deduplicated)
+  const allFlags = [...aiFlags];
+  for (const flag of serverComplianceFlags) {
+    if (!allFlags.includes(flag)) {
+      allFlags.push(flag);
+    }
+  }
 
   const follow_up_suggestion =
     typeof raw.follow_up_suggestion === "string"
@@ -105,12 +182,17 @@ function sanitizeResponse(raw: Record<string, unknown>): GenerateResponse {
     social_post,
     translations,
     readability_grade_estimate,
-    compliance_flags,
+    compliance_flags: allFlags,
     follow_up_suggestion,
+    metadata,
   };
 }
 
-function parseJsonResponse(content: string): GenerateResponse | null {
+function parseJsonResponse(
+  content: string,
+  metadata: GenerateResponse["metadata"],
+  serverComplianceFlags: string[]
+): GenerateResponse | null {
   let raw: Record<string, unknown> | null = null;
 
   // Step 1: try direct parse
@@ -135,26 +217,36 @@ function parseJsonResponse(content: string): GenerateResponse | null {
     return null;
   }
 
-  return sanitizeResponse(raw);
+  return sanitizeResponse(raw, metadata, serverComplianceFlags);
 }
 
 function buildUserPrompt(
   incidentType: string,
   location: string,
   confirmedFacts: string,
-  severity: string | undefined,
+  severity: string,
+  requiredAction: string | undefined,
   audience: string,
-  readingLevel: number
+  readingLevel: number,
+  tone: string,
+  sender: string,
+  formattedTime: string
 ): string {
-  const severityLine = severity ? `\nSeverity: ${severity}` : "";
-  const audienceLine = audience ? `\nAudience: ${audience}` : "";
+  const requiredActionLine = requiredAction
+    ? `\nRequired Action: ${requiredAction}`
+    : "\nRequired Action: (not specified — flag this in compliance_flags)";
 
   return `Generate emergency messages based on the following incident details:
 
 Incident Type: ${incidentType}
-Location: ${location}${severityLine}
-Confirmed Facts: ${confirmedFacts}${audienceLine}
+Location: ${location}
+Severity: ${severity}
+Confirmed Facts: ${confirmedFacts}${requiredActionLine}
+Audience: ${audience}
 Reading Level: Grade ${readingLevel}
+Tone: ${tone}
+Sender: ${sender}
+Time: ${formattedTime}
 
 Return STRICT JSON with this exact schema:
 
@@ -169,7 +261,7 @@ Return STRICT JSON with this exact schema:
   "follow_up_suggestion": "..."
 }
 
-No extra keys. No markdown. No commentary.`;
+Do not include explanations. No extra keys. No markdown. No commentary.`;
 }
 
 export async function POST(request: Request) {
@@ -188,8 +280,11 @@ export async function POST(request: Request) {
     location,
     severity,
     confirmedFacts,
+    requiredAction,
     audience,
     readingLevel,
+    tone,
+    sender,
   } = body;
 
   if (!incidentType || !location || !confirmedFacts) {
@@ -205,6 +300,23 @@ export async function POST(request: Request) {
   const effectiveAudience = audience || "general public";
   const effectiveReadingLevel =
     typeof readingLevel === "number" ? readingLevel : 6;
+  const effectiveTone = tone || "Neutral";
+  const effectiveSender = sender || "Emergency Management Office";
+  const effectiveSeverity = severity || "Medium";
+
+  const { timestamp_iso, formatted_time } = generateTimestamps();
+
+  const metadata: GenerateResponse["metadata"] = {
+    timestamp_iso,
+    formatted_time,
+    sender: effectiveSender,
+    tone: effectiveTone,
+  };
+
+  const serverComplianceFlags = buildComplianceFlags(
+    requiredAction,
+    confirmedFacts
+  );
 
   // Mock mode — deterministic response, no API call
   if (process.env.LLM_MOCK === "true") {
@@ -213,8 +325,11 @@ export async function POST(request: Request) {
         incidentType,
         location,
         confirmedFacts,
+        requiredAction,
         effectiveAudience,
-        effectiveReadingLevel
+        effectiveReadingLevel,
+        effectiveTone,
+        effectiveSender
       )
     );
   }
@@ -233,9 +348,13 @@ export async function POST(request: Request) {
     incidentType,
     location,
     confirmedFacts,
-    severity,
+    effectiveSeverity,
+    requiredAction,
     effectiveAudience,
-    effectiveReadingLevel
+    effectiveReadingLevel,
+    effectiveTone,
+    effectiveSender,
+    formatted_time
   );
 
   const headers: Record<string, string> = {
@@ -297,13 +416,16 @@ export async function POST(request: Request) {
             incidentType,
             location,
             confirmedFacts,
+            requiredAction,
             effectiveAudience,
-            effectiveReadingLevel
+            effectiveReadingLevel,
+            effectiveTone,
+            effectiveSender
           )
         );
       }
 
-      const parsed = parseJsonResponse(content);
+      const parsed = parseJsonResponse(content, metadata, serverComplianceFlags);
 
       if (!parsed) {
         return NextResponse.json(
@@ -311,8 +433,11 @@ export async function POST(request: Request) {
             incidentType,
             location,
             confirmedFacts,
+            requiredAction,
             effectiveAudience,
-            effectiveReadingLevel
+            effectiveReadingLevel,
+            effectiveTone,
+            effectiveSender
           )
         );
       }

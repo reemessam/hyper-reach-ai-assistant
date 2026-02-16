@@ -1,16 +1,20 @@
 "use client";
 
 import { useState } from "react";
-import type { GenerateResponse, IncidentType, SeverityLevel } from "@/app/types";
-import { INCIDENT_TYPES, SEVERITY_LEVELS } from "@/app/types";
+import type { GenerateResponse, IncidentType, SeverityLevel, Tone } from "@/app/types";
+import { INCIDENT_TYPES, SEVERITY_LEVELS, TONE_OPTIONS } from "@/app/types";
+import VoiceNotePlayer from "@/components/VoiceNotePlayer";
 
 export default function Home() {
   const [incidentType, setIncidentType] = useState<IncidentType>(INCIDENT_TYPES[0]);
   const [location, setLocation] = useState("");
   const [severity, setSeverity] = useState<SeverityLevel>("Medium");
   const [confirmedFacts, setConfirmedFacts] = useState("");
+  const [requiredAction, setRequiredAction] = useState("");
   const [audience, setAudience] = useState("");
   const [readingLevel, setReadingLevel] = useState(6);
+  const [tone, setTone] = useState<Tone>("Neutral");
+  const [sender, setSender] = useState("");
 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<GenerateResponse | null>(null);
@@ -38,8 +42,11 @@ export default function Home() {
           location,
           severity,
           confirmedFacts,
+          requiredAction: requiredAction.trim() || undefined,
           audience: audience.trim() || undefined,
           readingLevel,
+          tone,
+          sender: sender.trim() || undefined,
         }),
       });
 
@@ -127,23 +134,42 @@ export default function Home() {
               />
             </div>
 
-            {/* Severity */}
-            <div>
-              <label htmlFor="severity" className="block text-sm font-medium text-gray-700 mb-1">
-                Severity
-              </label>
-              <select
-                id="severity"
-                value={severity}
-                onChange={(e) => setSeverity(e.target.value as SeverityLevel)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-              >
-                {SEVERITY_LEVELS.map((level) => (
-                  <option key={level} value={level}>
-                    {level}
-                  </option>
-                ))}
-              </select>
+            {/* Severity & Tone row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="severity" className="block text-sm font-medium text-gray-700 mb-1">
+                  Severity
+                </label>
+                <select
+                  id="severity"
+                  value={severity}
+                  onChange={(e) => setSeverity(e.target.value as SeverityLevel)}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                >
+                  {SEVERITY_LEVELS.map((level) => (
+                    <option key={level} value={level}>
+                      {level}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="tone" className="block text-sm font-medium text-gray-700 mb-1">
+                  Tone
+                </label>
+                <select
+                  id="tone"
+                  value={tone}
+                  onChange={(e) => setTone(e.target.value as Tone)}
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+                >
+                  {TONE_OPTIONS.map((t) => (
+                    <option key={t} value={t}>
+                      {t}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {/* Audience & Reading Level row */}
@@ -182,6 +208,36 @@ export default function Home() {
               </div>
             </div>
 
+            {/* Sender */}
+            <div>
+              <label htmlFor="sender" className="block text-sm font-medium text-gray-700 mb-1">
+                Sender <span className="text-gray-400 font-normal">(optional, defaults to Emergency Management Office)</span>
+              </label>
+              <input
+                id="sender"
+                type="text"
+                value={sender}
+                onChange={(e) => setSender(e.target.value)}
+                placeholder="e.g., Springfield Fire Department"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              />
+            </div>
+
+            {/* Required Action */}
+            <div>
+              <label htmlFor="requiredAction" className="block text-sm font-medium text-gray-700 mb-1">
+                Required Action <span className="text-gray-400 font-normal">(optional)</span>
+              </label>
+              <input
+                id="requiredAction"
+                type="text"
+                value={requiredAction}
+                onChange={(e) => setRequiredAction(e.target.value)}
+                placeholder="e.g., Evacuate immediately via north exits"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              />
+            </div>
+
             {/* Confirmed Facts */}
             <div>
               <label htmlFor="confirmedFacts" className="block text-sm font-medium text-gray-700 mb-1">
@@ -218,6 +274,24 @@ export default function Home() {
         {/* Results */}
         {result && (
           <div className="space-y-4">
+            {/* Metadata bar */}
+            {result.metadata && (
+              <div className="bg-gray-100 rounded-lg px-4 py-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-gray-600">
+                <span>
+                  <span className="font-medium text-gray-700">Time:</span>{" "}
+                  {result.metadata.formatted_time}
+                </span>
+                <span>
+                  <span className="font-medium text-gray-700">Sender:</span>{" "}
+                  {result.metadata.sender}
+                </span>
+                <span>
+                  <span className="font-medium text-gray-700">Tone:</span>{" "}
+                  {result.metadata.tone}
+                </span>
+              </div>
+            )}
+
             {/* SMS Result */}
             <ResultCard
               title="SMS Message"
@@ -251,6 +325,7 @@ export default function Home() {
               <div className="bg-gray-50 rounded-md p-3 text-sm text-gray-800 whitespace-pre-line">
                 {result.voice_script}
               </div>
+              <VoiceNotePlayer text={result.voice_script} />
             </ResultCard>
 
             {/* Email Result */}
