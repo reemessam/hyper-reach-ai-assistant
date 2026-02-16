@@ -2,7 +2,9 @@ import { NextResponse } from "next/server";
 import type { GenerateResponse } from "@/app/types";
 
 const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
-const DEFAULT_MODEL = "mistralai/mistral-small-3.1-24b-instruct:free";
+const DEFAULT_MODEL = "meta-llama/llama-4-maverick:free";
+const MAX_RETRIES = 3;
+const RETRY_DELAYS = [1000, 2000, 4000]; // ms
 
 function mockResponse(
   incidentType: string,
@@ -128,53 +130,74 @@ Rules:
     headers["X-Title"] = process.env.APP_NAME;
   }
 
+  const requestBody = JSON.stringify({
+    model,
+    temperature: 0.3,
+    messages: [
+      {
+        role: "system",
+        content:
+          "You are an emergency communication assistant. Use only confirmed facts. Do not invent details. Write clearly and concisely. Always return valid JSON.",
+      },
+      { role: "user", content: prompt },
+    ],
+  });
+
   try {
-    const res = await fetch(OPENROUTER_URL, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        model,
-        temperature: 0.3,
-        messages: [
-          {
-            role: "system",
-            content:
-              "You are an emergency communication assistant. Use only confirmed facts. Do not invent details. Write clearly and concisely. Always return valid JSON.",
-          },
-          { role: "user", content: prompt },
-        ],
-      }),
-    });
+    let lastError = "";
 
-    if (!res.ok) {
-      const errBody = await res.text();
-      return NextResponse.json(
-        { error: `OpenRouter API error (${res.status}): ${errBody}` },
-        { status: 502 }
-      );
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const res = await fetch(OPENROUTER_URL, {
+        method: "POST",
+        headers,
+        body: requestBody,
+      });
+
+      // Retry on 429 (rate limit) or 502/503 (upstream transient errors)
+      if (
+        (res.status === 429 || res.status === 502 || res.status === 503) &&
+        attempt < MAX_RETRIES
+      ) {
+        lastError = await res.text();
+        await new Promise((r) => setTimeout(r, RETRY_DELAYS[attempt]));
+        continue;
+      }
+
+      if (!res.ok) {
+        const errBody = await res.text();
+        return NextResponse.json(
+          { error: `OpenRouter API error (${res.status}): ${errBody}` },
+          { status: 502 }
+        );
+      }
+
+      const data = await res.json();
+
+      const content: string | undefined =
+        data?.choices?.[0]?.message?.content;
+
+      if (!content) {
+        return NextResponse.json(
+          mockResponse(incidentType, location, confirmedFacts)
+        );
+      }
+
+      const parsed = parseJsonResponse(content);
+
+      if (!parsed) {
+        return NextResponse.json(
+          mockResponse(incidentType, location, confirmedFacts)
+        );
+      }
+
+      return NextResponse.json(parsed);
     }
 
-    const data = await res.json();
-
-    const content: string | undefined =
-      data?.choices?.[0]?.message?.content;
-
-    if (!content) {
-      return NextResponse.json(
-        mockResponse(incidentType, location, confirmedFacts)
-      );
-    }
-
-    const parsed = parseJsonResponse(content);
-
-    if (!parsed) {
-      // Fallback to mock when JSON parsing fails entirely
-      return NextResponse.json(
-        mockResponse(incidentType, location, confirmedFacts)
-      );
-    }
-
-    return NextResponse.json(parsed);
+    // All retries exhausted
+    return NextResponse.json(
+      { error: `OpenRouter API rate limited after ${MAX_RETRIES} retries: ${lastError}` },
+      { status: 502 }
+    );
   } catch {
     return NextResponse.json(
       { error: "An unexpected error occurred" },

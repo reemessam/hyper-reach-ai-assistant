@@ -14,7 +14,7 @@ npm install
 
 ```
 OPENROUTER_API_KEY=your_openrouter_api_key_here
-OPENROUTER_MODEL=mistralai/mistral-small-3.1-24b-instruct:free
+OPENROUTER_MODEL=mistralai/llama-4-maverick:free
 LLM_MOCK=false
 ```
 
@@ -31,7 +31,7 @@ npm run dev
 - Next.js 16 (App Router)
 - TypeScript
 - Tailwind CSS
-- OpenRouter API (mistral-small-3.1-24b-instruct:free by default)
+- OpenRouter API (llama-4-maverick:free by default)
 
 ## Deploy to Vercel
 
