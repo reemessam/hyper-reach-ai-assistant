@@ -47,3 +47,29 @@ export interface GenerateResponse {
     tone: string;
   };
 }
+
+/* ── Incident Log ── */
+
+export interface IncidentLifecycleData {
+  initialSentAt: string;
+  followUpDueAt: string;
+  followUpSentAt: string | null;
+  allClearGeneratedAt: string | null;
+  resolvedAt: string | null;
+}
+
+export interface IncidentRecord {
+  id: string;
+  createdAt: string;
+  incidentType: IncidentType;
+  location: string;
+  severity: SeverityLevel;
+  tone: Tone;
+  sender: string;
+  confirmedFacts: string;
+  requiredAction: string;
+  audience: string;
+  readingLevel: number;
+  outputs: GenerateResponse;
+  lifecycle: IncidentLifecycleData;
+}
