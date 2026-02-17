@@ -1,131 +1,105 @@
 "use client";
 
-import {useState} from "react";
+import { useState } from "react";
 import Image from "next/image";
-import type {GenerateRequest, SeverityLevel} from "@/app/types";
-import {useClipboard} from "@/hooks/useClipboard";
-import {useGenerateMessages} from "@/hooks/useGenerateMessages";
+import type { GenerateRequest } from "@/app/types";
+import { useGenerateMessages } from "@/hooks/useGenerateMessages";
+import { useIncidentLog } from "@/hooks/useIncidentLog";
 import IncidentForm from "@/components/IncidentForm";
-import MetadataBar from "@/components/MetadataBar";
-import SmsResult from "@/components/results/SmsResult";
-import VoiceScriptResult from "@/components/results/VoiceScriptResult";
-import EmailResult from "@/components/results/EmailResult";
-import SocialPostResult from "@/components/results/SocialPostResult";
-import TranslationResult from "@/components/results/TranslationResult";
-import MetadataPanel from "@/components/results/MetadataPanel";
-import FollowUpPanel from "@/components/results/FollowUpPanel";
-import IncidentLifecycle from "@/components/results/IncidentLifecycle";
+import IncidentSidebar from "@/components/IncidentSidebar";
+import IncidentDetail from "@/components/IncidentDetail";
 
 export default function Home() {
-    const {loading, result, error, generate} = useGenerateMessages();
-    const {copiedField, copyToClipboard} = useClipboard();
-    const [severity, setSeverity] = useState<SeverityLevel>("Medium");
+  const { loading, error, generate } = useGenerateMessages();
+  const {
+    incidents,
+    selected,
+    selectedId,
+    setSelectedId,
+    addIncident,
+    updateLifecycle,
+  } = useIncidentLog();
+  const [showForm, setShowForm] = useState(true);
 
-    function handleSubmit(data: GenerateRequest) {
-        setSeverity(data.severity);
-        generate(data);
+  async function handleSubmit(data: GenerateRequest) {
+    const result = await generate(data);
+    if (result) {
+      addIncident(data, result);
+      setShowForm(false);
     }
+  }
 
-    return (
-        <main className="min-h-screen bg-gray-50 py-8 px-4">
+  return (
+    <main className="min-h-screen bg-gray-50">
+      {/* Header */}
+      <header className="bg-white border-b border-gray-200 px-4 py-4">
+        <div className="max-w-7xl mx-auto flex items-center gap-4">
+          <Image
+            src="/images/hyper-reach-logo.png"
+            alt="Hyper Reach logo"
+            width={160}
+            height={48}
+            priority
+          />
+          <div>
+            <h1 className="text-xl font-bold text-gray-900 text-balance">
+              Hyper Reach AI Crisis Message Generator
+            </h1>
+            <p className="text-sm text-gray-600 text-pretty">
+              Generate structured emergency communications from confirmed
+              incident details.
+            </p>
+          </div>
+        </div>
+      </header>
+
+      <div className="flex max-w-7xl mx-auto min-h-[calc(100vh-88px)]">
+        {/* Left sidebar — incident log */}
+        <aside className="w-72 shrink-0 border-r border-gray-200 bg-white overflow-y-auto">
+          <div className="p-2 border-b border-gray-200">
+            <button
+              type="button"
+              onClick={() => setShowForm(true)}
+              className="w-full rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700 transition-colors"
+            >
+              + New Incident
+            </button>
+          </div>
+          <IncidentSidebar
+            incidents={incidents}
+            selectedId={selectedId}
+            onSelect={(id) => {
+              setSelectedId(id);
+              setShowForm(false);
+            }}
+          />
+        </aside>
+
+        {/* Right panel — form or detail view */}
+        <div className="flex-1 overflow-y-auto p-6">
+          {showForm ? (
             <div className="max-w-3xl mx-auto">
-                {/* Header with logo */}
-                <div className="flex flex-col items-center mb-8">
-                    <Image
-                        src="/images/hyper-reach-logo.png"
-                        alt="Hyper Reach logo"
-                        width={200}
-                        height={60}
-                        className="mb-3"
-                        priority
-                    />
-                    <h1 className="text-3xl font-bold text-gray-900 text-balance text-center">
-                        Hyper Reach AI Crisis Message Generator
-                    </h1>
-                    <p className="mt-2 text-gray-600 text-center text-pretty">
-                        Generate structured emergency communications from confirmed incident details.
-                    </p>
+              <IncidentForm onSubmit={handleSubmit} loading={loading} />
+              {error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                  <p className="text-red-700 text-sm">{error}</p>
                 </div>
-
-                <IncidentForm onSubmit={handleSubmit} loading={loading}/>
-
-                {error && (
-                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
-                        <p className="text-red-700 text-sm">{error}</p>
-                    </div>
-                )}
-
-                {result && (
-                    <div className="space-y-4">
-                        {result.metadata && (
-                            <MetadataBar metadata={result.metadata} severity={severity}/>
-                        )}
-
-                        <SmsResult
-                            sms={result.sms}
-                            severity={severity}
-                            onCopy={() => copyToClipboard(result.sms, "sms")}
-                            copied={copiedField === "sms"}
-                        />
-
-                        <VoiceScriptResult
-                            voiceScript={result.voice_script}
-                            severity={severity}
-                            onCopy={() => copyToClipboard(result.voice_script, "voice")}
-                            copied={copiedField === "voice"}
-                        />
-
-                        <EmailResult
-                            email={result.email}
-                            severity={severity}
-                            onCopy={() =>
-                                copyToClipboard(
-                                    `Subject: ${result.email.subject}\n\n${result.email.body}`,
-                                    "email"
-                                )
-                            }
-                            copied={copiedField === "email"}
-                        />
-
-                        <SocialPostResult
-                            socialPost={result.social_post}
-                            severity={severity}
-                            onCopy={() => copyToClipboard(result.social_post, "social")}
-                            copied={copiedField === "social"}
-                        />
-
-                        <TranslationResult
-                            translations={result.translations}
-                            severity={severity}
-                            onCopy={(lang: string) =>
-                                copyToClipboard(result.translations[lang] || "", `trans_${lang}`)
-                            }
-                            copiedLang={
-                                copiedField?.startsWith("trans_")
-                                    ? copiedField.replace("trans_", "")
-                                    : null
-                            }
-                        />
-
-                        <MetadataPanel
-                            readabilityGrade={result.readability_grade_estimate}
-                            complianceFlags={result.compliance_flags}
-                            severity={severity}
-                        />
-
-                        <FollowUpPanel suggestion={result.follow_up_suggestion} severity={severity}/>
-                        <IncidentLifecycle
-                            sms={result.sms}
-                            followUpSuggestion={result.follow_up_suggestion}
-                            formattedTime={result.metadata?.formatted_time}
-                            timestampIso={result.metadata?.timestamp_iso}
-                            severity={severity}
-                            sender={result.metadata?.sender}
-                            tone={result.metadata?.tone}
-                        />
-                    </div>
-                )}
+              )}
             </div>
-        </main>
-    );
+          ) : selected ? (
+            <div className="max-w-3xl mx-auto">
+              <IncidentDetail
+                incident={selected}
+                onUpdateLifecycle={updateLifecycle}
+              />
+            </div>
+          ) : (
+            <div className="flex items-center justify-center h-full text-gray-400 text-sm">
+              Select an incident or create a new one.
+            </div>
+          )}
+        </div>
+      </div>
+    </main>
+  );
 }

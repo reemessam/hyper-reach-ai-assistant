@@ -7,7 +7,7 @@ interface UseGenerateMessagesReturn {
   loading: boolean;
   result: GenerateResponse | null;
   error: string | null;
-  generate: (data: GenerateRequest) => Promise<void>;
+  generate: (data: GenerateRequest) => Promise<GenerateResponse | null>;
 }
 
 export function useGenerateMessages(): UseGenerateMessagesReturn {
@@ -15,7 +15,7 @@ export function useGenerateMessages(): UseGenerateMessagesReturn {
   const [result, setResult] = useState<GenerateResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const generate = useCallback(async (data: GenerateRequest) => {
+  const generate = useCallback(async (data: GenerateRequest): Promise<GenerateResponse | null> => {
     setLoading(true);
     setResult(null);
     setError(null);
@@ -31,12 +31,14 @@ export function useGenerateMessages(): UseGenerateMessagesReturn {
 
       if (!res.ok) {
         setError(json.error || "Something went wrong. Please try again.");
-        return;
+        return null;
       }
 
       setResult(json);
+      return json as GenerateResponse;
     } catch {
       setError("Network error. Please check your connection and try again.");
+      return null;
     } finally {
       setLoading(false);
     }
