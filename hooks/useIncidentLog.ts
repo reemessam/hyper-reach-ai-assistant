@@ -5,6 +5,7 @@ import type {
   GenerateRequest,
   GenerateResponse,
   IncidentRecord,
+  FollowUp,
   SeverityLevel,
 } from "@/app/types";
 
@@ -28,7 +29,12 @@ function readStorage(): IncidentRecord[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    return JSON.parse(raw) as IncidentRecord[];
+    const parsed = JSON.parse(raw) as IncidentRecord[];
+    // Ensure followUps array exists on older records
+    return parsed.map((inc) => ({
+      ...inc,
+      followUps: inc.followUps ?? [],
+    }));
   } catch {
     return [];
   }
@@ -78,6 +84,7 @@ export function useIncidentLog() {
           allClearGeneratedAt: null,
           resolvedAt: null,
         },
+        followUps: [],
       };
       setIncidents((prev) => {
         const next = [record, ...prev];
@@ -107,6 +114,48 @@ export function useIncidentLog() {
     []
   );
 
+  const addFollowUp = useCallback(
+    (incidentId: string, followUp: Omit<FollowUp, "id" | "createdAtIso">): string => {
+      const id = generateId();
+      const fu: FollowUp = {
+        ...followUp,
+        id,
+        createdAtIso: new Date().toISOString(),
+      };
+      setIncidents((prev) => {
+        const next = prev.map((inc) =>
+          inc.id === incidentId
+            ? { ...inc, followUps: [fu, ...inc.followUps] }
+            : inc
+        );
+        writeStorage(next);
+        return next;
+      });
+      return id;
+    },
+    []
+  );
+
+  const updateFollowUp = useCallback(
+    (incidentId: string, followUpId: string, updater: (fu: FollowUp) => FollowUp): void => {
+      setIncidents((prev) => {
+        const next = prev.map((inc) =>
+          inc.id === incidentId
+            ? {
+                ...inc,
+                followUps: inc.followUps.map((fu) =>
+                  fu.id === followUpId ? updater(fu) : fu
+                ),
+              }
+            : inc
+        );
+        writeStorage(next);
+        return next;
+      });
+    },
+    []
+  );
+
   return {
     incidents,
     selected,
@@ -114,5 +163,7 @@ export function useIncidentLog() {
     setSelectedId,
     addIncident,
     updateLifecycle,
+    addFollowUp,
+    updateFollowUp,
   } as const;
 }

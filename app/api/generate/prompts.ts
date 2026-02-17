@@ -61,3 +61,57 @@ Return STRICT JSON with this exact schema:
 
 Do not include explanations. No extra keys. No markdown. No commentary.`;
 }
+
+// ---------------------------------------------------------------------------
+// Follow-up prompt — generates only SMS + email for a follow-up message
+// ---------------------------------------------------------------------------
+
+export function buildFollowUpPrompt(
+  ctx: IncidentContext,
+  formattedTime: string,
+  previousSms: string | undefined,
+  lastFollowUpSms: string | null | undefined
+): string {
+  const requiredActionLine = ctx.requiredAction
+    ? `\nRequired Action: ${ctx.requiredAction}`
+    : "";
+
+  const previousLines: string[] = [];
+  if (previousSms) {
+    previousLines.push(`Previous initial SMS: "${previousSms}"`);
+  }
+  if (lastFollowUpSms) {
+    previousLines.push(`Last follow-up SMS: "${lastFollowUpSms}"`);
+  }
+  const previousContext =
+    previousLines.length > 0 ? `\n\n${previousLines.join("\n")}` : "";
+
+  return `Generate a follow-up message for an ongoing incident. Use ONLY confirmed facts. Do NOT generate an all-clear unless confirmedFacts explicitly says the incident is resolved.
+
+Incident Type: ${ctx.incidentType}
+Location: ${ctx.location}
+Severity: ${ctx.severity}
+Confirmed Facts: ${ctx.confirmedFacts}${requiredActionLine}
+Audience: ${ctx.audience}
+Reading Level: Grade ${ctx.readingLevel}
+Tone: ${ctx.tone}
+Sender: ${ctx.sender}
+Time: ${formattedTime}${previousContext}
+
+Return STRICT JSON with this exact schema:
+
+{
+  "follow_up": {
+    "sms": "...",
+    "email": { "subject": "...", "body": "..." },
+    "compliance_flags": []
+  }
+}
+
+Rules:
+- SMS must be <= 160 characters.
+- Reference this as a follow-up/update to the ongoing incident.
+- Respect the requested tone and reading level.
+- Do not invent new facts.
+- Do not include explanations. No extra keys. No markdown. No commentary.`;
+}

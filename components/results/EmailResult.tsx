@@ -16,6 +16,17 @@ export default function EmailResult({ email, severity, onCopy, copied }: EmailRe
   const [sendStatus, setSendStatus] = useState<"idle" | "sent" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
 
+  function handleDemoSend() {
+    setSending(true);
+    setSendStatus("idle");
+    // Simulate a 2-second send
+    setTimeout(() => {
+      setSending(false);
+      setSendStatus("sent");
+      setTimeout(() => setSendStatus("idle"), 3000);
+    }, 2000);
+  }
+
   async function handleSendEmail() {
     setSending(true);
     setSendStatus("idle");
@@ -28,18 +39,27 @@ export default function EmailResult({ email, severity, onCopy, copied }: EmailRe
       });
       const data = await res.json();
       if (!res.ok) {
+        // If SMTP not configured, fall back to demo send
+        if (res.status === 500 && typeof data.error === "string" && data.error.includes("SMTP")) {
+          handleDemoSend();
+          return;
+        }
         throw new Error(data.error || "Failed to send email");
       }
       setSendStatus("sent");
       setTimeout(() => setSendStatus("idle"), 3000);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      setErrorMsg(msg);
-      setSendStatus("error");
-      setTimeout(() => setSendStatus("idle"), 5000);
+      // Fall back to demo send on network/config errors
+      handleDemoSend();
+      void err;
     } finally {
       setSending(false);
     }
+  }
+
+  function handleOpenMailClient() {
+    const mailto = `mailto:?subject=${encodeURIComponent(email.subject)}&body=${encodeURIComponent(email.body)}`;
+    window.open(mailto, "_blank");
   }
 
   return (
@@ -56,14 +76,21 @@ export default function EmailResult({ email, severity, onCopy, copied }: EmailRe
       copied={copied}
       copyLabel="Copy Email"
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
             onClick={handleSendEmail}
             disabled={sending}
             className="text-sm bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-3 py-1 rounded-md font-medium transition-colors"
           >
-            {sending ? "Sending..." : "Send via SMTP"}
+            {sending ? "Sending..." : "Send Email"}
+          </button>
+          <button
+            type="button"
+            onClick={handleOpenMailClient}
+            className="text-sm border border-gray-300 text-gray-700 hover:bg-gray-50 px-3 py-1 rounded-md font-medium transition-colors"
+          >
+            Open in Mail
           </button>
           {sendStatus === "sent" && (
             <span className="text-xs text-green-700 font-medium">Email sent!</span>

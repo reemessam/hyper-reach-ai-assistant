@@ -18,6 +18,8 @@ export default function Home() {
     setSelectedId,
     addIncident,
     updateLifecycle,
+    addFollowUp,
+    updateFollowUp,
   } = useIncidentLog();
   const [showForm, setShowForm] = useState(true);
 
@@ -91,6 +93,8 @@ export default function Home() {
               <IncidentDetail
                 incident={selected}
                 onUpdateLifecycle={updateLifecycle}
+                onAddFollowUp={addFollowUp}
+                onUpdateFollowUp={updateFollowUp}
               />
             </div>
           ) : (

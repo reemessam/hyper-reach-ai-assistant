@@ -8,10 +8,10 @@ import {
   DEFAULT_SEVERITY,
 } from "./config";
 import type { RawRequestBody, IncidentContext } from "./types";
-import { buildUserPrompt } from "./prompts";
+import { buildUserPrompt, buildFollowUpPrompt } from "./prompts";
 import { buildMetadata, buildComplianceFlags } from "./metadata";
-import { buildMockResponse } from "./mock";
-import { parseJsonResponse } from "./parse";
+import { buildMockResponse, buildMockFollowUpResponse } from "./mock";
+import { parseJsonResponse, parseFollowUpJsonResponse } from "./parse";
 import { callAnthropic } from "./client";
 
 // ---------------------------------------------------------------------------
@@ -65,6 +65,8 @@ export async function POST(request: Request) {
     );
   }
 
+  const stage = body.stage || "initial";
+
   // 2. Validate & build context
   const validation = validateBody(body);
   if (!validation.valid) {
@@ -81,6 +83,9 @@ export async function POST(request: Request) {
 
   // 4. Mock mode — deterministic response, no API call
   if (process.env.LLM_MOCK === "true") {
+    if (stage === "follow_up") {
+      return NextResponse.json(buildMockFollowUpResponse(ctx));
+    }
     return NextResponse.json(buildMockResponse(ctx));
   }
 
@@ -93,8 +98,16 @@ export async function POST(request: Request) {
     );
   }
 
-  // 6. Build prompt and call Anthropic
-  const userPrompt = buildUserPrompt(ctx, metadata.formatted_time);
+  // 6. Build prompt based on stage
+  const userPrompt =
+    stage === "follow_up"
+      ? buildFollowUpPrompt(
+          ctx,
+          metadata.formatted_time,
+          body.previousSms,
+          body.lastFollowUpSms
+        )
+      : buildUserPrompt(ctx, metadata.formatted_time);
 
   try {
     const result = await callAnthropic(apiKey, userPrompt);
@@ -108,12 +121,22 @@ export async function POST(request: Request) {
 
     // Empty content — fall back to mock
     if (!result.content) {
+      if (stage === "follow_up") {
+        return NextResponse.json(buildMockFollowUpResponse(ctx));
+      }
       return NextResponse.json(buildMockResponse(ctx));
     }
 
-    // 7. Parse AI response JSON
-    const parsed = parseJsonResponse(result.content, metadata, serverFlags);
+    // 7. Parse AI response JSON based on stage
+    if (stage === "follow_up") {
+      const parsed = parseFollowUpJsonResponse(result.content, serverFlags);
+      if (!parsed) {
+        return NextResponse.json(buildMockFollowUpResponse(ctx));
+      }
+      return NextResponse.json(parsed);
+    }
 
+    const parsed = parseJsonResponse(result.content, metadata, serverFlags);
     if (!parsed) {
       return NextResponse.json(buildMockResponse(ctx));
     }
