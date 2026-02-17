@@ -48,6 +48,42 @@ export interface GenerateResponse {
   };
 }
 
+/* ── Follow-Up Messages ── */
+
+export interface FollowUpDelivery {
+  status: "queued" | "sent" | "failed";
+  channels: {
+    sms: "queued" | "sent" | "failed";
+    email: "queued" | "sent" | "failed";
+  };
+  queuedAtIso?: string | null;
+  sentAtIso?: string | null;
+}
+
+export interface FollowUp {
+  id: string;
+  createdAtIso: string;
+  status: "draft" | "sent" | "failed";
+  sentAtIso?: string | null;
+  content: {
+    sms: string;
+    email: { subject: string; body: string };
+  };
+  channels: { sms: boolean; email: boolean };
+  recipients?: { smsTo?: string; emailTo?: string };
+  tone?: Tone;
+  compliance_flags: string[];
+  delivery?: FollowUpDelivery;
+}
+
+export interface FollowUpGenerateResponse {
+  follow_up: {
+    sms: string;
+    email: { subject: string; body: string };
+    compliance_flags: string[];
+  };
+}
+
 /* ── Incident Log ── */
 
 export interface IncidentLifecycleData {
@@ -72,4 +108,5 @@ export interface IncidentRecord {
   readingLevel: number;
   outputs: GenerateResponse;
   lifecycle: IncidentLifecycleData;
+  followUps: FollowUp[];
 }

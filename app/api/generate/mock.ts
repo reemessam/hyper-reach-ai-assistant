@@ -1,4 +1,4 @@
-import type { GenerateResponse } from "@/app/types";
+import type { GenerateResponse, FollowUpGenerateResponse } from "@/app/types";
 import type { IncidentContext } from "./types";
 import { SMS_MAX_LENGTH } from "./config";
 import { buildMetadata, buildComplianceFlags } from "./metadata";
@@ -61,5 +61,30 @@ export function buildMockResponse(ctx: IncidentContext): GenerateResponse {
     ),
     follow_up_suggestion: `Send a follow-up message in 30 minutes with updated status on the ${ctx.incidentType} at ${ctx.location}.`,
     metadata,
+  };
+}
+
+export function buildMockFollowUpResponse(ctx: IncidentContext): FollowUpGenerateResponse {
+  const tonePrefix = ctx.tone === "Urgent" ? "URGENT: " : "";
+  const actionPart = ctx.requiredAction
+    ? ` ${ctx.requiredAction}`
+    : " Follow official guidance.";
+
+  const sms = `${tonePrefix}UPDATE: ${ctx.incidentType} at ${ctx.location}.${actionPart}`.slice(
+    0,
+    SMS_MAX_LENGTH
+  );
+
+  const emailSubjectPrefix = ctx.tone === "Urgent" ? "URGENT - " : "";
+
+  return {
+    follow_up: {
+      sms,
+      email: {
+        subject: `${emailSubjectPrefix}Update: ${ctx.incidentType} at ${ctx.location}`,
+        body: `This is a follow-up to the ongoing ${ctx.incidentType} at ${ctx.location}.\n\nCurrent confirmed information:\n${ctx.confirmedFacts}${ctx.requiredAction ? `\n\nRequired Action:\n${ctx.requiredAction}` : ""}\n\nWe will continue to provide updates as the situation develops. Please follow all official instructions.`,
+      },
+      compliance_flags: buildComplianceFlags(ctx.requiredAction, ctx.confirmedFacts),
+    },
   };
 }

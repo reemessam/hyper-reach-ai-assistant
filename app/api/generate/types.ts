@@ -4,6 +4,7 @@
 
 /** Raw incoming request body before validation. */
 export interface RawRequestBody {
+  stage?: "initial" | "follow_up";
   incidentType?: string;
   location?: string;
   severity?: string;
@@ -13,6 +14,8 @@ export interface RawRequestBody {
   readingLevel?: number;
   tone?: string;
   sender?: string;
+  previousSms?: string;
+  lastFollowUpSms?: string | null;
 }
 
 /** Validated and defaulted incident context passed between modules. */
