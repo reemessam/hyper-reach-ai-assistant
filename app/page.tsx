@@ -1,6 +1,8 @@
 "use client";
 
-import type { GenerateRequest } from "@/app/types";
+import { useState } from "react";
+import Image from "next/image";
+import type { GenerateRequest, SeverityLevel } from "@/app/types";
 import { useClipboard } from "@/hooks/useClipboard";
 import { useGenerateMessages } from "@/hooks/useGenerateMessages";
 import IncidentForm from "@/components/IncidentForm";
@@ -16,22 +18,30 @@ import FollowUpPanel from "@/components/results/FollowUpPanel";
 export default function Home() {
   const { loading, result, error, generate } = useGenerateMessages();
   const { copiedField, copyToClipboard } = useClipboard();
+  const [severity, setSeverity] = useState<SeverityLevel>("Medium");
 
   function handleSubmit(data: GenerateRequest) {
-    if (!data.location.trim() || !data.confirmedFacts.trim()) {
-      return;
-    }
+    setSeverity(data.severity);
     generate(data);
   }
 
   return (
     <main className="min-h-screen bg-gray-50 py-8 px-4">
       <div className="max-w-3xl mx-auto">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">
-            AI Crisis Message Generator
+        {/* Header with logo */}
+        <div className="flex flex-col items-center mb-8">
+          <Image
+            src="/images/hyper-reach-logo.jpg"
+            alt="Hyper Reach logo"
+            width={64}
+            height={64}
+            className="rounded-lg mb-3"
+            priority
+          />
+          <h1 className="text-3xl font-bold text-gray-900 text-balance text-center">
+            Hyper Reach AI Crisis Message Generator
           </h1>
-          <p className="mt-2 text-gray-600">
+          <p className="mt-2 text-gray-600 text-center text-pretty">
             Generate structured emergency communications from confirmed incident details.
           </p>
         </div>
@@ -46,22 +56,27 @@ export default function Home() {
 
         {result && (
           <div className="space-y-4">
-            {result.metadata && <MetadataBar metadata={result.metadata} />}
+            {result.metadata && (
+              <MetadataBar metadata={result.metadata} severity={severity} />
+            )}
 
             <SmsResult
               sms={result.sms}
+              severity={severity}
               onCopy={() => copyToClipboard(result.sms, "sms")}
               copied={copiedField === "sms"}
             />
 
             <VoiceScriptResult
               voiceScript={result.voice_script}
+              severity={severity}
               onCopy={() => copyToClipboard(result.voice_script, "voice")}
               copied={copiedField === "voice"}
             />
 
             <EmailResult
               email={result.email}
+              severity={severity}
               onCopy={() =>
                 copyToClipboard(
                   `Subject: ${result.email.subject}\n\n${result.email.body}`,
@@ -73,13 +88,17 @@ export default function Home() {
 
             <SocialPostResult
               socialPost={result.social_post}
+              severity={severity}
               onCopy={() => copyToClipboard(result.social_post, "social")}
               copied={copiedField === "social"}
             />
 
             <TranslationResult
               translations={result.translations}
-              onCopy={(lang) => copyToClipboard(result.translations[lang] || "", `trans_${lang}`)}
+              severity={severity}
+              onCopy={(lang: string) =>
+                copyToClipboard(result.translations[lang] || "", `trans_${lang}`)
+              }
               copiedLang={
                 copiedField?.startsWith("trans_")
                   ? copiedField.replace("trans_", "")
@@ -90,9 +109,10 @@ export default function Home() {
             <MetadataPanel
               readabilityGrade={result.readability_grade_estimate}
               complianceFlags={result.compliance_flags}
+              severity={severity}
             />
 
-            <FollowUpPanel suggestion={result.follow_up_suggestion} />
+            <FollowUpPanel suggestion={result.follow_up_suggestion} severity={severity} />
           </div>
         )}
       </div>

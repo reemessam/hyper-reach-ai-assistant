@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { SeverityLevel } from "@/app/types";
 import ResultCard from "@/components/ResultCard";
 
 const LANGUAGE_LABELS: Record<string, string> = {
@@ -13,12 +14,14 @@ const LANGUAGE_LABELS: Record<string, string> = {
 
 interface TranslationResultProps {
   translations: Record<string, string>;
+  severity: SeverityLevel;
   onCopy: (lang: string) => void;
   copiedLang: string | null;
 }
 
 export default function TranslationResult({
   translations,
+  severity,
   onCopy,
   copiedLang,
 }: TranslationResultProps) {
@@ -31,6 +34,14 @@ export default function TranslationResult({
   return (
     <ResultCard
       title="SMS Translations"
+      icon={
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="2" y1="12" x2="22" y2="12" />
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+        </svg>
+      }
+      severity={severity}
       badge={
         <span
           className={`text-xs font-medium px-2 py-1 rounded-full ${
@@ -56,7 +67,7 @@ export default function TranslationResult({
               className={`text-xs font-medium px-3 py-1.5 rounded-full transition-colors ${
                 activeLang === lang
                   ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  : "bg-white/70 text-gray-700 hover:bg-white"
               }`}
             >
               {LANGUAGE_LABELS[lang] || lang.toUpperCase()}
@@ -64,7 +75,7 @@ export default function TranslationResult({
           ))}
         </div>
         <p
-          className="text-gray-800 bg-gray-50 rounded-md p-3 text-sm font-mono"
+          className="text-gray-800 bg-white/60 rounded-md p-3 text-sm font-mono"
           dir={activeLang === "ar" ? "rtl" : "ltr"}
         >
           {activeText}

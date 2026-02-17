@@ -1,86 +1,130 @@
 "use client";
 
 import { useState } from "react";
+import type { SeverityLevel } from "@/app/types";
 import ResultCard from "@/components/ResultCard";
 
 interface SocialPostResultProps {
   socialPost: string;
+  severity: SeverityLevel;
   onCopy: () => void;
   copied: boolean;
 }
 
+type Platform = "twitter" | "facebook";
+
 export default function SocialPostResult({
   socialPost,
+  severity,
   onCopy,
   copied,
 }: SocialPostResultProps) {
-  const [shareHint, setShareHint] = useState<string | null>(null);
+  const [posting, setPosting] = useState<Platform | null>(null);
+  const [postStatus, setPostStatus] = useState<Record<Platform, "idle" | "posted" | "error">>({
+    twitter: "idle",
+    facebook: "idle",
+  });
 
-  async function copyAndShare(platform: "twitter" | "facebook" | "linkedin") {
+  async function handlePost(platform: Platform) {
+    setPosting(platform);
+    setPostStatus((prev) => ({ ...prev, [platform]: "idle" }));
     try {
-      await navigator.clipboard.writeText(socialPost);
+      const res = await fetch("/api/post-social", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ platform, message: socialPost }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || "Failed to post");
+      }
+      setPostStatus((prev) => ({ ...prev, [platform]: "posted" }));
+      setTimeout(
+        () => setPostStatus((prev) => ({ ...prev, [platform]: "idle" })),
+        3000
+      );
     } catch {
-      // clipboard may fail in some browsers, continue to open the share URL
+      setPostStatus((prev) => ({ ...prev, [platform]: "error" }));
+      setTimeout(
+        () => setPostStatus((prev) => ({ ...prev, [platform]: "idle" })),
+        4000
+      );
+    } finally {
+      setPosting(null);
     }
+  }
 
-    let url: string;
-    switch (platform) {
-      case "twitter":
-        url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(socialPost)}`;
-        break;
-      case "facebook":
-        url = `https://www.facebook.com/sharer/sharer.php?quote=${encodeURIComponent(socialPost)}`;
-        break;
-      case "linkedin":
-        url = `https://www.linkedin.com/sharing/share-offsite/?summary=${encodeURIComponent(socialPost)}`;
-        break;
-    }
-
-    setShareHint("Post copied to clipboard! Paste it in the opened window.");
-    setTimeout(() => setShareHint(null), 4000);
-    window.open(url, "_blank", "noopener,noreferrer,width=600,height=500");
+  function statusLabel(platform: Platform): string | null {
+    if (postStatus[platform] === "posted") return "Posted!";
+    if (postStatus[platform] === "error") return "Failed. Check API keys.";
+    return null;
   }
 
   return (
     <ResultCard
       title="Social Media Post"
+      icon={
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="18" cy="5" r="3" />
+          <circle cx="6" cy="12" r="3" />
+          <circle cx="18" cy="19" r="3" />
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49" />
+          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49" />
+        </svg>
+      }
+      severity={severity}
       onCopy={onCopy}
       copied={copied}
       copyLabel="Copy Post"
       actions={
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Twitter / X */}
             <button
               type="button"
-              onClick={() => copyAndShare("twitter")}
-              className="text-xs bg-gray-900 hover:bg-gray-800 text-white px-3 py-1 rounded-full font-medium transition-colors"
+              onClick={() => handlePost("twitter")}
+              disabled={posting !== null}
+              className="text-xs bg-gray-900 hover:bg-gray-800 disabled:opacity-50 text-white px-3 py-1 rounded-full font-medium transition-colors"
             >
-              Share to X
+              {posting === "twitter" ? "Posting..." : "Post to X"}
             </button>
+            {statusLabel("twitter") && (
+              <span
+                className={`text-xs font-medium ${
+                  postStatus.twitter === "posted"
+                    ? "text-green-700"
+                    : "text-red-700"
+                }`}
+              >
+                {statusLabel("twitter")}
+              </span>
+            )}
+
+            {/* Facebook */}
             <button
               type="button"
-              onClick={() => copyAndShare("facebook")}
-              className="text-xs bg-blue-700 hover:bg-blue-800 text-white px-3 py-1 rounded-full font-medium transition-colors"
+              onClick={() => handlePost("facebook")}
+              disabled={posting !== null}
+              className="text-xs bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white px-3 py-1 rounded-full font-medium transition-colors"
             >
-              Share to Facebook
+              {posting === "facebook" ? "Posting..." : "Post to Facebook"}
             </button>
-            <button
-              type="button"
-              onClick={() => copyAndShare("linkedin")}
-              className="text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-full font-medium transition-colors"
-            >
-              Share to LinkedIn
-            </button>
+            {statusLabel("facebook") && (
+              <span
+                className={`text-xs font-medium ${
+                  postStatus.facebook === "posted"
+                    ? "text-green-700"
+                    : "text-red-700"
+                }`}
+              >
+                {statusLabel("facebook")}
+              </span>
+            )}
           </div>
-          {shareHint && (
-            <p className="text-xs text-amber-700 bg-amber-50 rounded px-2 py-1 font-medium">
-              {shareHint}
-            </p>
-          )}
         </div>
       }
     >
-      <div className="bg-gray-50 rounded-md p-3 text-sm text-gray-800 whitespace-pre-line">
+      <div className="bg-white/60 rounded-md p-3 text-sm text-gray-800 whitespace-pre-line">
         {socialPost}
       </div>
     </ResultCard>
