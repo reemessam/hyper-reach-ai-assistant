@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import type { FollowUp } from "@/app/types";
+import { copyText } from "@/lib/actions";
 
 interface FollowUpListProps {
   followUps: FollowUp[];
@@ -48,19 +49,10 @@ function DeliveryLine({ delivery }: { delivery: FollowUp["delivery"] }) {
 export default function FollowUpList({ followUps, onSendNow }: FollowUpListProps) {
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  const copyContent = useCallback(async (fu: FollowUp) => {
+  function handleCopy(fu: FollowUp) {
     const text = `SMS: ${fu.content.sms}\n\nEmail Subject: ${fu.content.email.subject}\n\nEmail Body: ${fu.content.email.body}`;
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      const textarea = document.createElement("textarea");
-      textarea.value = text;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand("copy");
-      document.body.removeChild(textarea);
-    }
-  }, []);
+    copyText(text);
+  }
 
   if (followUps.length === 0) {
     return (
@@ -94,7 +86,7 @@ export default function FollowUpList({ followUps, onSendNow }: FollowUpListProps
               </button>
               <button
                 type="button"
-                onClick={() => copyContent(fu)}
+                onClick={() => handleCopy(fu)}
                 className="text-xs text-blue-600 hover:text-blue-800 font-medium"
               >
                 Copy

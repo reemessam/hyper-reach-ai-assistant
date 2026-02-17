@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import type { SeverityLevel } from "@/app/types";
+import { sendSms } from "@/lib/actions";
 import ResultCard from "@/components/ResultCard";
 
 interface SmsResultProps {
@@ -14,27 +15,24 @@ interface SmsResultProps {
 export default function SmsResult({ sms, severity, onCopy, copied }: SmsResultProps) {
   const [sending, setSending] = useState(false);
   const [sendStatus, setSendStatus] = useState<"idle" | "sent" | "error">("idle");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [recipient, setRecipient] = useState("");
 
   async function handleSendSms() {
     setSending(true);
     setSendStatus("idle");
-    try {
-      const res = await fetch("/api/send-sms", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: sms }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to send SMS");
-      }
+    setErrorMsg("");
+
+    const result = await sendSms(sms, recipient.trim() || undefined);
+
+    setSending(false);
+    if (result.ok) {
       setSendStatus("sent");
       setTimeout(() => setSendStatus("idle"), 3000);
-    } catch {
+    } else {
+      setErrorMsg(result.error || "Failed to send SMS");
       setSendStatus("error");
       setTimeout(() => setSendStatus("idle"), 4000);
-    } finally {
-      setSending(false);
     }
   }
 
@@ -62,20 +60,29 @@ export default function SmsResult({ sms, severity, onCopy, copied }: SmsResultPr
       copied={copied}
       copyLabel="Copy SMS"
       actions={
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleSendSms}
-            disabled={sending}
-            className="text-sm bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-3 py-1 rounded-md font-medium transition-colors"
-          >
-            {sending ? "Sending..." : "Send SMS via Twilio"}
-          </button>
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <input
+              type="tel"
+              value={recipient}
+              onChange={(e) => setRecipient(e.target.value)}
+              placeholder="Phone number (optional)"
+              className="text-sm border border-gray-300 rounded-md px-2 py-1 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none w-48"
+            />
+            <button
+              type="button"
+              onClick={handleSendSms}
+              disabled={sending}
+              className="text-sm bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-3 py-1 rounded-md font-medium transition-colors"
+            >
+              {sending ? "Sending..." : "Send SMS"}
+            </button>
+          </div>
           {sendStatus === "sent" && (
             <span className="text-xs text-green-700 font-medium">SMS sent!</span>
           )}
           {sendStatus === "error" && (
-            <span className="text-xs text-red-700 font-medium">Failed to send. Check Twilio config.</span>
+            <span className="text-xs text-red-700 font-medium">{errorMsg || "Failed to send."}</span>
           )}
         </div>
       }

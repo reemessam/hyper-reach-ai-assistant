@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import type { IncidentRecord, IncidentLifecycleData, FollowUp } from "@/app/types";
+import { sendSms, sendEmail } from "@/lib/actions";
 import { useClipboard } from "@/hooks/useClipboard";
 import MetadataBar from "@/components/MetadataBar";
 import SmsResult from "@/components/results/SmsResult";
@@ -17,6 +18,8 @@ import FollowUpList from "@/components/FollowUpList";
 
 type Tab = "results" | "timeline" | "followups";
 
+type DeliveryChannelStatus = "queued" | "sent" | "failed";
+
 interface IncidentDetailProps {
   incident: IncidentRecord;
   onUpdateLifecycle: (id: string, patch: Partial<IncidentLifecycleData>) => void;
@@ -24,34 +27,33 @@ interface IncidentDetailProps {
   onUpdateFollowUp: (incidentId: string, fuId: string, updater: (fu: FollowUp) => FollowUp) => void;
 }
 
-async function sendSms(message: string): Promise<{ ok: boolean; error?: string }> {
-  try {
-    const res = await fetch("/api/send-sms", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
-    });
-    if (res.ok) return { ok: true };
-    const data = await res.json();
-    return { ok: false, error: data.error || "SMS send failed" };
-  } catch {
-    return { ok: false, error: "Network error sending SMS" };
-  }
-}
+function resolveDeliveryStatus(
+  smsEnabled: boolean,
+  emailEnabled: boolean,
+  smsResult: { ok: boolean },
+  emailResult: { ok: boolean }
+): {
+  overallStatus: DeliveryChannelStatus;
+  smsStatus: DeliveryChannelStatus;
+  emailStatus: DeliveryChannelStatus;
+  followUpStatus: FollowUp["status"];
+} {
+  const smsStatus: DeliveryChannelStatus = smsEnabled
+    ? smsResult.ok ? "sent" : "failed"
+    : "sent";
+  const emailStatus: DeliveryChannelStatus = emailEnabled
+    ? emailResult.ok ? "sent" : "failed"
+    : "sent";
+  const allFailed =
+    (smsEnabled && !smsResult.ok) &&
+    (emailEnabled && !emailResult.ok);
 
-async function sendEmail(subject: string, body: string): Promise<{ ok: boolean; error?: string }> {
-  try {
-    const res = await fetch("/api/send-email", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subject, body }),
-    });
-    if (res.ok) return { ok: true };
-    const data = await res.json();
-    return { ok: false, error: data.error || "Email send failed" };
-  } catch {
-    return { ok: false, error: "Network error sending email" };
-  }
+  return {
+    overallStatus: allFailed ? "failed" : "sent",
+    smsStatus,
+    emailStatus,
+    followUpStatus: allFailed ? "failed" : "sent",
+  };
 }
 
 export default function IncidentDetail({
@@ -62,19 +64,20 @@ export default function IncidentDetail({
 }: IncidentDetailProps) {
   const { copiedField, copyToClipboard } = useClipboard();
   const [activeTab, setActiveTab] = useState<Tab>("results");
+  const [followUpSending, setFollowUpSending] = useState(false);
   const result = incident.outputs;
   const severity = incident.severity;
 
-  const handleSaveDraft = useCallback(
-    (fu: Omit<FollowUp, "id" | "createdAtIso">) => {
-      onAddFollowUp(incident.id, fu);
-    },
-    [incident.id, onAddFollowUp]
-  );
+  const markTimelineFollowUpSent = useCallback(() => {
+    if (!incident.lifecycle.followUpSentAt) {
+      onUpdateLifecycle(incident.id, { followUpSentAt: new Date().toISOString() });
+    }
+  }, [incident.id, incident.lifecycle.followUpSentAt, onUpdateLifecycle]);
 
   const handleSendNow = useCallback(
     async (fu: Omit<FollowUp, "id" | "createdAtIso">) => {
-      // Add the follow-up in "sent" status with delivery queued
+      setFollowUpSending(true);
+
       const fuId = onAddFollowUp(incident.id, {
         ...fu,
         delivery: {
@@ -88,38 +91,36 @@ export default function IncidentDetail({
         },
       });
 
-      // Actually send via the APIs
       const smsResult = fu.channels.sms
-        ? await sendSms(fu.content.sms)
+        ? await sendSms(fu.content.sms, fu.recipients?.smsTo)
         : { ok: true };
 
       const emailResult = fu.channels.email
-        ? await sendEmail(fu.content.email.subject, fu.content.email.body)
+        ? await sendEmail(fu.content.email.subject, fu.content.email.body, fu.recipients?.emailTo)
         : { ok: true };
 
-      const smsFinal = fu.channels.sms
-        ? (smsResult.ok ? "sent" as const : "failed" as const)
-        : "sent" as const;
-
-      const emailFinal = fu.channels.email
-        ? (emailResult.ok ? "sent" as const : "failed" as const)
-        : "sent" as const;
-
-      const overallOk = smsFinal !== "failed" && emailFinal !== "failed";
-      const anyOk = smsFinal === "sent" || emailFinal === "sent";
+      const delivery = resolveDeliveryStatus(
+        fu.channels.sms, fu.channels.email, smsResult, emailResult
+      );
 
       onUpdateFollowUp(incident.id, fuId, (existing) => ({
         ...existing,
-        status: overallOk ? "sent" : anyOk ? "sent" : "failed",
+        status: delivery.followUpStatus,
         delivery: {
-          status: overallOk ? "sent" as const : anyOk ? "sent" as const : "failed" as const,
-          channels: { sms: smsFinal, email: emailFinal },
+          status: delivery.overallStatus,
+          channels: { sms: delivery.smsStatus, email: delivery.emailStatus },
           queuedAtIso: existing.delivery?.queuedAtIso ?? null,
           sentAtIso: new Date().toISOString(),
         },
       }));
+
+      if (delivery.followUpStatus === "sent") {
+        markTimelineFollowUpSent();
+      }
+
+      setFollowUpSending(false);
     },
-    [incident.id, onAddFollowUp, onUpdateFollowUp]
+    [incident.id, onAddFollowUp, onUpdateFollowUp, markTimelineFollowUpSent]
   );
 
   const handleFollowUpSendNow = useCallback(
@@ -127,64 +128,55 @@ export default function IncidentDetail({
       const fu = incident.followUps.find((f) => f.id === followUpId);
       if (!fu) return;
 
-      // Mark as queued first
       onUpdateFollowUp(incident.id, followUpId, (existing) => ({
         ...existing,
-        status: "sent" as const,
+        status: "sent",
         sentAtIso: new Date().toISOString(),
         delivery: {
-          status: "queued" as const,
+          status: "queued",
           channels: {
-            sms: existing.channels.sms ? "queued" as const : "sent" as const,
-            email: existing.channels.email ? "queued" as const : "sent" as const,
+            sms: existing.channels.sms ? "queued" : "sent",
+            email: existing.channels.email ? "queued" : "sent",
           },
           queuedAtIso: new Date().toISOString(),
           sentAtIso: null,
         },
       }));
 
-      // Actually send via APIs
       const smsResult = fu.channels.sms
-        ? await sendSms(fu.content.sms)
+        ? await sendSms(fu.content.sms, fu.recipients?.smsTo)
         : { ok: true };
 
       const emailResult = fu.channels.email
-        ? await sendEmail(fu.content.email.subject, fu.content.email.body)
+        ? await sendEmail(fu.content.email.subject, fu.content.email.body, fu.recipients?.emailTo)
         : { ok: true };
 
-      const smsFinal = fu.channels.sms
-        ? (smsResult.ok ? "sent" as const : "failed" as const)
-        : "sent" as const;
-
-      const emailFinal = fu.channels.email
-        ? (emailResult.ok ? "sent" as const : "failed" as const)
-        : "sent" as const;
-
-      const overallOk = smsFinal !== "failed" && emailFinal !== "failed";
-      const anyOk = smsFinal === "sent" || emailFinal === "sent";
+      const delivery = resolveDeliveryStatus(
+        fu.channels.sms, fu.channels.email, smsResult, emailResult
+      );
 
       onUpdateFollowUp(incident.id, followUpId, (existing) => ({
         ...existing,
-        status: overallOk ? "sent" : anyOk ? "sent" : "failed",
+        status: delivery.followUpStatus,
         delivery: {
-          status: overallOk ? "sent" as const : anyOk ? "sent" as const : "failed" as const,
-          channels: { sms: smsFinal, email: emailFinal },
+          status: delivery.overallStatus,
+          channels: { sms: delivery.smsStatus, email: delivery.emailStatus },
           queuedAtIso: existing.delivery?.queuedAtIso ?? null,
           sentAtIso: new Date().toISOString(),
         },
       }));
+
+      if (delivery.followUpStatus === "sent") {
+        markTimelineFollowUpSent();
+      }
     },
-    [incident.id, incident.followUps, onUpdateFollowUp]
+    [incident.id, incident.followUps, onUpdateFollowUp, markTimelineFollowUpSent]
   );
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
     { key: "results", label: "Results" },
     { key: "timeline", label: "Timeline" },
-    {
-      key: "followups",
-      label: "Follow-Ups",
-      count: incident.followUps.length,
-    },
+    { key: "followups", label: "Follow-Ups", count: incident.followUps.length },
   ];
 
   return (
@@ -291,8 +283,8 @@ export default function IncidentDetail({
         <div className="space-y-4">
           <FollowUpEditor
             incident={incident}
-            onSaveDraft={handleSaveDraft}
             onSendNow={handleSendNow}
+            sending={followUpSending}
           />
 
           <FollowUpList

@@ -70,6 +70,7 @@ export interface FollowUp {
     email: { subject: string; body: string };
   };
   channels: { sms: boolean; email: boolean };
+  recipients?: { smsTo?: string; emailTo?: string };
   tone?: Tone;
   compliance_flags: string[];
   delivery?: FollowUpDelivery;

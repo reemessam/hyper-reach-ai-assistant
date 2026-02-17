@@ -30,6 +30,18 @@ function validateBody(
     };
   }
 
+  const MAX_FIELD_LENGTH = 10_000;
+  if (
+    confirmedFacts.length > MAX_FIELD_LENGTH ||
+    location.length > MAX_FIELD_LENGTH ||
+    (body.requiredAction && body.requiredAction.length > MAX_FIELD_LENGTH)
+  ) {
+    return {
+      valid: false,
+      error: `Field values must not exceed ${MAX_FIELD_LENGTH} characters.`,
+    };
+  }
+
   return {
     valid: true,
     ctx: {
@@ -121,6 +133,7 @@ export async function POST(request: Request) {
 
     // Empty content — fall back to mock
     if (!result.content) {
+      console.warn("[generate] Empty AI response, falling back to mock data");
       if (stage === "follow_up") {
         return NextResponse.json(buildMockFollowUpResponse(ctx));
       }
@@ -131,6 +144,7 @@ export async function POST(request: Request) {
     if (stage === "follow_up") {
       const parsed = parseFollowUpJsonResponse(result.content, serverFlags);
       if (!parsed) {
+        console.warn("[generate] Failed to parse follow-up AI response, falling back to mock");
         return NextResponse.json(buildMockFollowUpResponse(ctx));
       }
       return NextResponse.json(parsed);
@@ -138,11 +152,13 @@ export async function POST(request: Request) {
 
     const parsed = parseJsonResponse(result.content, metadata, serverFlags);
     if (!parsed) {
+      console.warn("[generate] Failed to parse AI response, falling back to mock");
       return NextResponse.json(buildMockResponse(ctx));
     }
 
     return NextResponse.json(parsed);
-  } catch {
+  } catch (err) {
+    console.error("[generate] Unexpected error:", err);
     return NextResponse.json(
       { error: "An unexpected error occurred" },
       { status: 500 }

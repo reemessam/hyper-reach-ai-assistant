@@ -6,14 +6,14 @@ import { TONE_OPTIONS } from "@/app/types";
 
 interface FollowUpEditorProps {
   incident: IncidentRecord;
-  onSaveDraft: (fu: Omit<FollowUp, "id" | "createdAtIso">) => void;
   onSendNow: (fu: Omit<FollowUp, "id" | "createdAtIso">) => void;
+  sending?: boolean;
 }
 
 export default function FollowUpEditor({
   incident,
-  onSaveDraft,
   onSendNow,
+  sending = false,
 }: FollowUpEditorProps) {
   const [open, setOpen] = useState(false);
   const [tone, setTone] = useState<Tone>(incident.tone || "Neutral");
@@ -22,7 +22,10 @@ export default function FollowUpEditor({
   const [smsText, setSmsText] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
   const [emailBody, setEmailBody] = useState("");
+  const [smsRecipient, setSmsRecipient] = useState("");
+  const [emailRecipient, setEmailRecipient] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
   const [complianceFlags, setComplianceFlags] = useState<string[]>([]);
   const [confirmSend, setConfirmSend] = useState(false);
 
@@ -40,30 +43,29 @@ export default function FollowUpEditor({
     return flags;
   }, [smsChannel, smsText.length, incident.severity, incident.requiredAction, incident.confirmedFacts]);
 
-  function buildFollowUpData(
-    status: FollowUp["status"]
-  ): Omit<FollowUp, "id" | "createdAtIso"> {
+  function buildFollowUpData(): Omit<FollowUp, "id" | "createdAtIso"> {
     return {
-      status,
-      sentAtIso: status === "sent" ? new Date().toISOString() : null,
+      status: "sent",
+      sentAtIso: new Date().toISOString(),
       content: {
         sms: smsText,
         email: { subject: emailSubject, body: emailBody },
       },
       channels: { sms: smsChannel, email: emailChannel },
+      recipients: {
+        smsTo: smsRecipient.trim() || undefined,
+        emailTo: emailRecipient.trim() || undefined,
+      },
       tone,
       compliance_flags: complianceFlags,
     };
   }
 
-  function handleSaveDraft() {
-    const flags = validateFollowUp();
-    setComplianceFlags(flags);
-    onSaveDraft(buildFollowUpData("draft"));
-    resetForm();
-  }
-
   function handleSendNow() {
+    if (!smsChannel && !emailChannel) return;
+    if (smsChannel && !smsText.trim()) return;
+    if (emailChannel && (!emailSubject.trim() || !emailBody.trim())) return;
+
     const flags = validateFollowUp();
     setComplianceFlags(flags);
 
@@ -73,12 +75,13 @@ export default function FollowUpEditor({
     }
 
     setConfirmSend(false);
-    onSendNow(buildFollowUpData("sent"));
+    onSendNow(buildFollowUpData());
     resetForm();
   }
 
   async function handleDraftWithAI() {
     setAiLoading(true);
+    setAiError(null);
     setComplianceFlags([]);
 
     const lastFollowUpSms =
@@ -114,9 +117,11 @@ export default function FollowUpEditor({
         if (fu.follow_up.compliance_flags.length > 0) {
           setComplianceFlags(fu.follow_up.compliance_flags);
         }
+      } else {
+        setAiError(data.error || "Failed to generate follow-up.");
       }
     } catch {
-      // Silently handle — user can still manually draft
+      setAiError("Network error. You can still write manually.");
     } finally {
       setAiLoading(false);
     }
@@ -126,8 +131,11 @@ export default function FollowUpEditor({
     setSmsText("");
     setEmailSubject("");
     setEmailBody("");
+    setSmsRecipient("");
+    setEmailRecipient("");
     setComplianceFlags([]);
     setConfirmSend(false);
+    setAiError(null);
     setOpen(false);
   }
 
@@ -142,6 +150,9 @@ export default function FollowUpEditor({
       </button>
     );
   }
+
+  const canSend =
+    (smsChannel && smsText.trim()) || (emailChannel && emailSubject.trim() && emailBody.trim());
 
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -159,8 +170,11 @@ export default function FollowUpEditor({
       <div className="space-y-4">
         {/* Tone */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Tone</label>
+          <label htmlFor="fu-tone" className="block text-sm font-medium text-gray-700 mb-1">
+            Tone
+          </label>
           <select
+            id="fu-tone"
             value={tone}
             onChange={(e) => setTone(e.target.value as Tone)}
             className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
@@ -193,38 +207,67 @@ export default function FollowUpEditor({
           </label>
         </div>
 
-        {/* SMS textarea */}
+        {/* SMS fields */}
         {smsChannel && (
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              SMS Message
-              <span
-                className={`ml-2 text-xs font-normal ${
-                  smsText.length > 160 ? "text-red-600" : "text-gray-400"
-                }`}
-              >
-                {smsText.length}/160
-              </span>
-            </label>
-            <textarea
-              value={smsText}
-              onChange={(e) => setSmsText(e.target.value)}
-              rows={2}
-              placeholder="Follow-up SMS message..."
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none font-mono text-sm"
-            />
-            {smsText.length > 160 && (
-              <p className="text-xs text-red-600 mt-1">SMS exceeds 160 characters</p>
-            )}
+          <div className="space-y-2">
+            <div>
+              <label htmlFor="fu-sms-to" className="block text-sm font-medium text-gray-700 mb-1">
+                Phone Number <span className="text-gray-400 font-normal">(optional — uses default if empty)</span>
+              </label>
+              <input
+                id="fu-sms-to"
+                type="tel"
+                value={smsRecipient}
+                onChange={(e) => setSmsRecipient(e.target.value)}
+                placeholder="+1234567890"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              />
+            </div>
+            <div>
+              <label htmlFor="fu-sms" className="block text-sm font-medium text-gray-700 mb-1">
+                SMS Message
+                <span
+                  className={`ml-2 text-xs font-normal ${
+                    smsText.length > 160 ? "text-red-600" : "text-gray-400"
+                  }`}
+                >
+                  {smsText.length}/160
+                </span>
+              </label>
+              <textarea
+                id="fu-sms"
+                value={smsText}
+                onChange={(e) => setSmsText(e.target.value)}
+                rows={2}
+                placeholder="Follow-up SMS message..."
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none font-mono text-sm"
+              />
+            </div>
           </div>
         )}
 
         {/* Email fields */}
         {emailChannel && (
-          <div className="space-y-3">
+          <div className="space-y-2">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email Subject</label>
+              <label htmlFor="fu-email-to" className="block text-sm font-medium text-gray-700 mb-1">
+                Email Address <span className="text-gray-400 font-normal">(optional — uses default if empty)</span>
+              </label>
               <input
+                id="fu-email-to"
+                type="email"
+                value={emailRecipient}
+                onChange={(e) => setEmailRecipient(e.target.value)}
+                placeholder="recipient@example.com"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+              />
+            </div>
+            <div>
+              <label htmlFor="fu-email-subject" className="block text-sm font-medium text-gray-700 mb-1">
+                Email Subject
+              </label>
+              <input
+                id="fu-email-subject"
                 type="text"
                 value={emailSubject}
                 onChange={(e) => setEmailSubject(e.target.value)}
@@ -233,8 +276,11 @@ export default function FollowUpEditor({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Email Body</label>
+              <label htmlFor="fu-email-body" className="block text-sm font-medium text-gray-700 mb-1">
+                Email Body
+              </label>
               <textarea
+                id="fu-email-body"
                 value={emailBody}
                 onChange={(e) => setEmailBody(e.target.value)}
                 rows={4}
@@ -242,6 +288,13 @@ export default function FollowUpEditor({
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-vertical"
               />
             </div>
+          </div>
+        )}
+
+        {/* AI error */}
+        {aiError && (
+          <div className="bg-red-50 border border-red-200 rounded-md p-3">
+            <p className="text-sm text-red-700">{aiError}</p>
           </div>
         )}
 
@@ -271,17 +324,11 @@ export default function FollowUpEditor({
           </button>
           <button
             type="button"
-            onClick={handleSaveDraft}
-            className="px-4 py-2 rounded-md border border-gray-300 text-gray-700 text-sm font-medium hover:bg-gray-50 transition-colors"
-          >
-            Save Draft
-          </button>
-          <button
-            type="button"
             onClick={handleSendNow}
-            className="px-4 py-2 rounded-md bg-green-600 text-white text-sm font-medium hover:bg-green-700 transition-colors"
+            disabled={!canSend || sending}
+            className="px-4 py-2 rounded-md bg-green-600 text-white text-sm font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {confirmSend ? "Send Anyway" : "Send Now"}
+            {sending ? "Sending..." : confirmSend ? "Send Anyway" : "Send Now"}
           </button>
         </div>
       </div>

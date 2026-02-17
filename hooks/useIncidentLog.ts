@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import type {
   GenerateRequest,
   GenerateResponse,
@@ -41,7 +41,11 @@ function readStorage(): IncidentRecord[] {
 }
 
 function writeStorage(incidents: IncidentRecord[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(incidents));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(incidents));
+  } catch (err) {
+    console.error("[useIncidentLog] Failed to write to localStorage:", err);
+  }
 }
 
 export function useIncidentLog() {
@@ -57,7 +61,10 @@ export function useIncidentLog() {
     }
   }, []);
 
-  const selected = incidents.find((i) => i.id === selectedId) ?? null;
+  const selected = useMemo(
+    () => incidents.find((i) => i.id === selectedId) ?? null,
+    [incidents, selectedId]
+  );
 
   const addIncident = useCallback(
     (request: GenerateRequest, outputs: GenerateResponse) => {

@@ -5,19 +5,16 @@ import type { GenerateRequest, GenerateResponse } from "@/app/types";
 
 interface UseGenerateMessagesReturn {
   loading: boolean;
-  result: GenerateResponse | null;
   error: string | null;
   generate: (data: GenerateRequest) => Promise<GenerateResponse | null>;
 }
 
 export function useGenerateMessages(): UseGenerateMessagesReturn {
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<GenerateResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const generate = useCallback(async (data: GenerateRequest): Promise<GenerateResponse | null> => {
     setLoading(true);
-    setResult(null);
     setError(null);
 
     try {
@@ -34,7 +31,6 @@ export function useGenerateMessages(): UseGenerateMessagesReturn {
         return null;
       }
 
-      setResult(json);
       return json as GenerateResponse;
     } catch {
       setError("Network error. Please check your connection and try again.");
@@ -44,5 +40,5 @@ export function useGenerateMessages(): UseGenerateMessagesReturn {
     }
   }, []);
 
-  return { loading, result, error, generate };
+  return { loading, error, generate };
 }

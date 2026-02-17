@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import type { SeverityLevel } from "@/app/types";
+import { copyText } from "@/lib/actions";
 import ResultCard from "@/components/ResultCard";
 
 interface SocialPostResultProps {
@@ -19,30 +20,15 @@ export default function SocialPostResult({
 }: SocialPostResultProps) {
   const [shareNotice, setShareNotice] = useState<string | null>(null);
 
-  const copyAndNotify = useCallback(async (text: string, platform: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      const textarea = document.createElement("textarea");
-      textarea.value = text;
-      document.body.appendChild(textarea);
-      textarea.select();
-      document.execCommand("copy");
-      document.body.removeChild(textarea);
-    }
-    setShareNotice(`Content copied! Paste it in ${platform}.`);
-    setTimeout(() => setShareNotice(null), 4000);
-  }, []);
-
   function handleShareTwitter() {
     const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(socialPost)}`;
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
-  function handleShareFacebook() {
-    // Facebook sharer doesn't support text-only sharing.
-    // Copy content to clipboard first, then open Facebook.
-    copyAndNotify(socialPost, "Facebook");
+  async function handleShareFacebook() {
+    await copyText(socialPost);
+    setShareNotice("Content copied! Paste it in Facebook.");
+    setTimeout(() => setShareNotice(null), 4000);
     window.open(
       `https://www.facebook.com/sharer/sharer.php?quote=${encodeURIComponent(socialPost)}`,
       "_blank",
