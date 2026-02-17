@@ -39,17 +39,21 @@ export function buildMockResponse(ctx: IncidentContext): GenerateResponse {
   const socialEmoji = ctx.tone === "Urgent" ? "\u{1F6A8}" : "\u26A0\uFE0F";
   const social_post = `${socialEmoji} EMERGENCY: ${ctx.incidentType} reported at ${ctx.location} (${metadata.formatted_time}). ${ctx.confirmedFacts.slice(0, 80)}${ctx.requiredAction ? ` ${ctx.requiredAction}` : " Follow official guidance."} \u2014 ${ctx.sender}`;
 
-  const es_sms = `ALERTA: ${ctx.incidentType} en ${ctx.location}.${ctx.requiredAction ? ` ${ctx.requiredAction}` : " Siga las instrucciones oficiales."}`.slice(
-    0,
-    SMS_MAX_LENGTH
-  );
+  const actionMock = ctx.requiredAction || "Follow official guidance.";
+  const translations: Record<string, string> = {
+    es: `ALERTA: ${ctx.incidentType} en ${ctx.location}. ${actionMock}`.slice(0, SMS_MAX_LENGTH),
+    fr: `ALERTE: ${ctx.incidentType} a ${ctx.location}. ${actionMock}`.slice(0, SMS_MAX_LENGTH),
+    ar: `\u062A\u0646\u0628\u064A\u0647: ${ctx.incidentType} \u0641\u064A ${ctx.location}. ${actionMock}`.slice(0, SMS_MAX_LENGTH),
+    zh: `\u8B66\u62A5: ${ctx.location} \u53D1\u751F ${ctx.incidentType}\u3002${actionMock}`.slice(0, SMS_MAX_LENGTH),
+    hi: `\u0905\u0932\u0930\u094D\u091F: ${ctx.location} \u092A\u0930 ${ctx.incidentType}\u0964 ${actionMock}`.slice(0, SMS_MAX_LENGTH),
+  };
 
   return {
     sms,
     voice_script,
     email,
     social_post,
-    translations: { es_sms },
+    translations,
     readability_grade_estimate: ctx.readingLevel,
     compliance_flags: buildComplianceFlags(
       ctx.requiredAction,

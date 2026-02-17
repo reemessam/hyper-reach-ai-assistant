@@ -1,6 +1,3 @@
-"use client";
-
-import { useState } from "react";
 import ResultCard from "@/components/ResultCard";
 
 interface EmailResultProps {
@@ -10,38 +7,9 @@ interface EmailResultProps {
 }
 
 export default function EmailResult({ email, onCopy, copied }: EmailResultProps) {
-  const [sending, setSending] = useState(false);
-  const [sendStatus, setSendStatus] = useState<"idle" | "success" | "error">("idle");
-  const [sendError, setSendError] = useState<string | null>(null);
-
-  async function handleSend() {
-    setSending(true);
-    setSendStatus("idle");
-    setSendError(null);
-
-    try {
-      const res = await fetch("/api/send-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subject: email.subject, body: email.body }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setSendStatus("error");
-        setSendError(data.error || "Failed to send email.");
-        return;
-      }
-
-      setSendStatus("success");
-      setTimeout(() => setSendStatus("idle"), 3000);
-    } catch {
-      setSendStatus("error");
-      setSendError("Network error. Could not send email.");
-    } finally {
-      setSending(false);
-    }
+  function handleSendEmail() {
+    const mailto = `mailto:?subject=${encodeURIComponent(email.subject)}&body=${encodeURIComponent(email.body)}`;
+    window.open(mailto, "_blank");
   }
 
   return (
@@ -51,22 +19,13 @@ export default function EmailResult({ email, onCopy, copied }: EmailResultProps)
       copied={copied}
       copyLabel="Copy Email"
       actions={
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={handleSend}
-            disabled={sending}
-            className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-md font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {sending ? "Sending..." : "Send Email"}
-          </button>
-          {sendStatus === "success" && (
-            <span className="text-sm text-green-600 font-medium">Email sent!</span>
-          )}
-          {sendStatus === "error" && (
-            <span className="text-sm text-red-600 font-medium">{sendError}</span>
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={handleSendEmail}
+          className="text-sm bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded-md font-medium transition-colors"
+        >
+          Open in Email Client
+        </button>
       }
     >
       <div className="space-y-3">

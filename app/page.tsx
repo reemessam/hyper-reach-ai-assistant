@@ -78,9 +78,13 @@ export default function Home() {
             />
 
             <TranslationResult
-              esSms={result.translations.es_sms}
-              onCopy={() => copyToClipboard(result.translations.es_sms, "es_sms")}
-              copied={copiedField === "es_sms"}
+              translations={result.translations}
+              onCopy={(lang) => copyToClipboard(result.translations[lang] || "", `trans_${lang}`)}
+              copiedLang={
+                copiedField?.startsWith("trans_")
+                  ? copiedField.replace("trans_", "")
+                  : null
+              }
             />
 
             <MetadataPanel
