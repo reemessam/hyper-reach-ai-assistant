@@ -8,14 +8,12 @@ interface FollowUpEditorProps {
   incident: IncidentRecord;
   onSaveDraft: (fu: Omit<FollowUp, "id" | "createdAtIso">) => void;
   onSendNow: (fu: Omit<FollowUp, "id" | "createdAtIso">) => void;
-  onSchedule: (fu: Omit<FollowUp, "id" | "createdAtIso">) => void;
 }
 
 export default function FollowUpEditor({
   incident,
   onSaveDraft,
   onSendNow,
-  onSchedule,
 }: FollowUpEditorProps) {
   const [open, setOpen] = useState(false);
   const [tone, setTone] = useState<Tone>(incident.tone || "Neutral");
@@ -24,7 +22,6 @@ export default function FollowUpEditor({
   const [smsText, setSmsText] = useState("");
   const [emailSubject, setEmailSubject] = useState("");
   const [emailBody, setEmailBody] = useState("");
-  const [scheduleDate, setScheduleDate] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
   const [complianceFlags, setComplianceFlags] = useState<string[]>([]);
   const [confirmSend, setConfirmSend] = useState(false);
@@ -44,12 +41,10 @@ export default function FollowUpEditor({
   }, [smsChannel, smsText.length, incident.severity, incident.requiredAction, incident.confirmedFacts]);
 
   function buildFollowUpData(
-    status: FollowUp["status"],
-    scheduledAtIso?: string | null
+    status: FollowUp["status"]
   ): Omit<FollowUp, "id" | "createdAtIso"> {
     return {
       status,
-      scheduledAtIso: scheduledAtIso ?? null,
       sentAtIso: status === "sent" ? new Date().toISOString() : null,
       content: {
         sms: smsText,
@@ -58,18 +53,6 @@ export default function FollowUpEditor({
       channels: { sms: smsChannel, email: emailChannel },
       tone,
       compliance_flags: complianceFlags,
-      delivery:
-        status === "sent"
-          ? {
-              status: "queued",
-              channels: {
-                sms: smsChannel ? "queued" : "sent",
-                email: emailChannel ? "queued" : "sent",
-              },
-              queuedAtIso: new Date().toISOString(),
-              sentAtIso: null,
-            }
-          : undefined,
     };
   }
 
@@ -91,14 +74,6 @@ export default function FollowUpEditor({
 
     setConfirmSend(false);
     onSendNow(buildFollowUpData("sent"));
-    resetForm();
-  }
-
-  function handleSchedule() {
-    if (!scheduleDate) return;
-    const flags = validateFollowUp();
-    setComplianceFlags(flags);
-    onSchedule(buildFollowUpData("scheduled", new Date(scheduleDate).toISOString()));
     resetForm();
   }
 
@@ -151,7 +126,6 @@ export default function FollowUpEditor({
     setSmsText("");
     setEmailSubject("");
     setEmailBody("");
-    setScheduleDate("");
     setComplianceFlags([]);
     setConfirmSend(false);
     setOpen(false);
@@ -271,19 +245,6 @@ export default function FollowUpEditor({
           </div>
         )}
 
-        {/* Schedule datetime */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Schedule <span className="text-gray-400 font-normal">(optional)</span>
-          </label>
-          <input
-            type="datetime-local"
-            value={scheduleDate}
-            onChange={(e) => setScheduleDate(e.target.value)}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
-          />
-        </div>
-
         {/* Compliance flags */}
         {complianceFlags.length > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-md p-3">
@@ -322,15 +283,6 @@ export default function FollowUpEditor({
           >
             {confirmSend ? "Send Anyway" : "Send Now"}
           </button>
-          {scheduleDate && (
-            <button
-              type="button"
-              onClick={handleSchedule}
-              className="px-4 py-2 rounded-md bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors"
-            >
-              Schedule
-            </button>
-          )}
         </div>
       </div>
     </div>

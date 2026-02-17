@@ -11,7 +11,6 @@ interface FollowUpListProps {
 function StatusBadge({ status }: { status: FollowUp["status"] }) {
   const styles: Record<FollowUp["status"], string> = {
     draft: "bg-gray-100 text-gray-700",
-    scheduled: "bg-blue-100 text-blue-700",
     sent: "bg-green-100 text-green-700",
     failed: "bg-red-100 text-red-700",
   };
@@ -100,7 +99,7 @@ export default function FollowUpList({ followUps, onSendNow }: FollowUpListProps
               >
                 Copy
               </button>
-              {(fu.status === "draft" || fu.status === "scheduled") && (
+              {fu.status === "draft" && (
                 <button
                   type="button"
                   onClick={() => onSendNow(fu.id)}
@@ -119,13 +118,6 @@ export default function FollowUpList({ followUps, onSendNow }: FollowUpListProps
 
           {/* Delivery line for sent messages */}
           {fu.status === "sent" && <DeliveryLine delivery={fu.delivery} />}
-
-          {/* Scheduled time */}
-          {fu.status === "scheduled" && fu.scheduledAtIso && (
-            <p className="text-xs text-blue-600 mt-1">
-              Scheduled: {new Date(fu.scheduledAtIso).toLocaleString()}
-            </p>
-          )}
 
           {/* Expanded view */}
           {expandedId === fu.id && (

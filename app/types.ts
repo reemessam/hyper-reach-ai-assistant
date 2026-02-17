@@ -63,8 +63,7 @@ export interface FollowUpDelivery {
 export interface FollowUp {
   id: string;
   createdAtIso: string;
-  status: "draft" | "scheduled" | "sent" | "failed";
-  scheduledAtIso?: string | null;
+  status: "draft" | "sent" | "failed";
   sentAtIso?: string | null;
   content: {
     sms: string;

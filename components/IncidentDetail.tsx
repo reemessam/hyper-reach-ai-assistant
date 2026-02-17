@@ -24,6 +24,36 @@ interface IncidentDetailProps {
   onUpdateFollowUp: (incidentId: string, fuId: string, updater: (fu: FollowUp) => FollowUp) => void;
 }
 
+async function sendSms(message: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch("/api/send-sms", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message }),
+    });
+    if (res.ok) return { ok: true };
+    const data = await res.json();
+    return { ok: false, error: data.error || "SMS send failed" };
+  } catch {
+    return { ok: false, error: "Network error sending SMS" };
+  }
+}
+
+async function sendEmail(subject: string, body: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch("/api/send-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subject, body }),
+    });
+    if (res.ok) return { ok: true };
+    const data = await res.json();
+    return { ok: false, error: data.error || "Email send failed" };
+  } catch {
+    return { ok: false, error: "Network error sending email" };
+  }
+}
+
 export default function IncidentDetail({
   incident,
   onUpdateLifecycle,
@@ -43,34 +73,61 @@ export default function IncidentDetail({
   );
 
   const handleSendNow = useCallback(
-    (fu: Omit<FollowUp, "id" | "createdAtIso">) => {
-      const fuId = onAddFollowUp(incident.id, fu);
-
-      // Simulate delivery: queued -> sent after 2 seconds
-      setTimeout(() => {
-        onUpdateFollowUp(incident.id, fuId, (existing) => ({
-          ...existing,
-          delivery: {
-            status: "sent" as const,
-            channels: { sms: "sent" as const, email: "sent" as const },
-            queuedAtIso: existing.delivery?.queuedAtIso ?? null,
-            sentAtIso: new Date().toISOString(),
+    async (fu: Omit<FollowUp, "id" | "createdAtIso">) => {
+      // Add the follow-up in "sent" status with delivery queued
+      const fuId = onAddFollowUp(incident.id, {
+        ...fu,
+        delivery: {
+          status: "queued",
+          channels: {
+            sms: fu.channels.sms ? "queued" : "sent",
+            email: fu.channels.email ? "queued" : "sent",
           },
-        }));
-      }, 2000);
+          queuedAtIso: new Date().toISOString(),
+          sentAtIso: null,
+        },
+      });
+
+      // Actually send via the APIs
+      const smsResult = fu.channels.sms
+        ? await sendSms(fu.content.sms)
+        : { ok: true };
+
+      const emailResult = fu.channels.email
+        ? await sendEmail(fu.content.email.subject, fu.content.email.body)
+        : { ok: true };
+
+      const smsFinal = fu.channels.sms
+        ? (smsResult.ok ? "sent" as const : "failed" as const)
+        : "sent" as const;
+
+      const emailFinal = fu.channels.email
+        ? (emailResult.ok ? "sent" as const : "failed" as const)
+        : "sent" as const;
+
+      const overallOk = smsFinal !== "failed" && emailFinal !== "failed";
+      const anyOk = smsFinal === "sent" || emailFinal === "sent";
+
+      onUpdateFollowUp(incident.id, fuId, (existing) => ({
+        ...existing,
+        status: overallOk ? "sent" : anyOk ? "sent" : "failed",
+        delivery: {
+          status: overallOk ? "sent" as const : anyOk ? "sent" as const : "failed" as const,
+          channels: { sms: smsFinal, email: emailFinal },
+          queuedAtIso: existing.delivery?.queuedAtIso ?? null,
+          sentAtIso: new Date().toISOString(),
+        },
+      }));
     },
     [incident.id, onAddFollowUp, onUpdateFollowUp]
   );
 
-  const handleSchedule = useCallback(
-    (fu: Omit<FollowUp, "id" | "createdAtIso">) => {
-      onAddFollowUp(incident.id, fu);
-    },
-    [incident.id, onAddFollowUp]
-  );
-
   const handleFollowUpSendNow = useCallback(
-    (followUpId: string) => {
+    async (followUpId: string) => {
+      const fu = incident.followUps.find((f) => f.id === followUpId);
+      if (!fu) return;
+
+      // Mark as queued first
       onUpdateFollowUp(incident.id, followUpId, (existing) => ({
         ...existing,
         status: "sent" as const,
@@ -78,27 +135,46 @@ export default function IncidentDetail({
         delivery: {
           status: "queued" as const,
           channels: {
-            sms: existing.channels.sms ? ("queued" as const) : ("sent" as const),
-            email: existing.channels.email ? ("queued" as const) : ("sent" as const),
+            sms: existing.channels.sms ? "queued" as const : "sent" as const,
+            email: existing.channels.email ? "queued" as const : "sent" as const,
           },
           queuedAtIso: new Date().toISOString(),
           sentAtIso: null,
         },
       }));
 
-      setTimeout(() => {
-        onUpdateFollowUp(incident.id, followUpId, (existing) => ({
-          ...existing,
-          delivery: {
-            status: "sent" as const,
-            channels: { sms: "sent" as const, email: "sent" as const },
-            queuedAtIso: existing.delivery?.queuedAtIso ?? null,
-            sentAtIso: new Date().toISOString(),
-          },
-        }));
-      }, 2000);
+      // Actually send via APIs
+      const smsResult = fu.channels.sms
+        ? await sendSms(fu.content.sms)
+        : { ok: true };
+
+      const emailResult = fu.channels.email
+        ? await sendEmail(fu.content.email.subject, fu.content.email.body)
+        : { ok: true };
+
+      const smsFinal = fu.channels.sms
+        ? (smsResult.ok ? "sent" as const : "failed" as const)
+        : "sent" as const;
+
+      const emailFinal = fu.channels.email
+        ? (emailResult.ok ? "sent" as const : "failed" as const)
+        : "sent" as const;
+
+      const overallOk = smsFinal !== "failed" && emailFinal !== "failed";
+      const anyOk = smsFinal === "sent" || emailFinal === "sent";
+
+      onUpdateFollowUp(incident.id, followUpId, (existing) => ({
+        ...existing,
+        status: overallOk ? "sent" : anyOk ? "sent" : "failed",
+        delivery: {
+          status: overallOk ? "sent" as const : anyOk ? "sent" as const : "failed" as const,
+          channels: { sms: smsFinal, email: emailFinal },
+          queuedAtIso: existing.delivery?.queuedAtIso ?? null,
+          sentAtIso: new Date().toISOString(),
+        },
+      }));
     },
-    [incident.id, onUpdateFollowUp]
+    [incident.id, incident.followUps, onUpdateFollowUp]
   );
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
@@ -217,7 +293,6 @@ export default function IncidentDetail({
             incident={incident}
             onSaveDraft={handleSaveDraft}
             onSendNow={handleSendNow}
-            onSchedule={handleSchedule}
           />
 
           <FollowUpList
