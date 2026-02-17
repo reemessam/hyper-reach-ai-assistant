@@ -1,3 +1,6 @@
+"use client";
+
+import { useState, useCallback } from "react";
 import type { SeverityLevel } from "@/app/types";
 import ResultCard from "@/components/ResultCard";
 import VoiceNotePlayer from "@/components/VoiceNotePlayer";
@@ -9,16 +12,102 @@ interface VoiceScriptResultProps {
   copied: boolean;
 }
 
+function synthesizeToBlob(text: string): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    const audioCtx = new AudioContext();
+    const dest = audioCtx.createMediaStreamDestination();
+    const recorder = new MediaRecorder(dest.stream, { mimeType: "audio/webm" });
+    const chunks: Blob[] = [];
+
+    recorder.ondataavailable = (e: BlobEvent) => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
+
+    recorder.onstop = () => {
+      audioCtx.close();
+      resolve(new Blob(chunks, { type: "audio/webm" }));
+    };
+
+    recorder.onerror = () => {
+      audioCtx.close();
+      reject(new Error("Recording failed"));
+    };
+
+    // Use an oscillator as a silent source to keep the AudioContext alive
+    const osc = audioCtx.createOscillator();
+    osc.frequency.value = 0;
+    osc.connect(dest);
+    osc.start();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1;
+    utterance.pitch = 1;
+
+    utterance.onstart = () => {
+      recorder.start();
+    };
+
+    utterance.onend = () => {
+      osc.stop();
+      recorder.stop();
+    };
+
+    utterance.onerror = () => {
+      osc.stop();
+      recorder.stop();
+      reject(new Error("Speech synthesis failed"));
+    };
+
+    window.speechSynthesis.speak(utterance);
+  });
+}
+
 export default function VoiceScriptResult({
   voiceScript,
   severity,
   onCopy,
   copied,
 }: VoiceScriptResultProps) {
-  function handleShareWhatsApp() {
-    const url = `https://wa.me/?text=${encodeURIComponent(voiceScript)}`;
-    window.open(url, "_blank", "noopener,noreferrer");
-  }
+  const [sharing, setSharing] = useState(false);
+
+  const handleShareWhatsApp = useCallback(async () => {
+    setSharing(true);
+    try {
+      // Try Web Share API with audio file first (works on mobile)
+      if (typeof navigator.share === "function" && typeof navigator.canShare === "function") {
+        try {
+          const blob = await synthesizeToBlob(voiceScript);
+          const file = new File([blob], "voice-note.webm", { type: "audio/webm" });
+          const shareData: ShareData = {
+            text: voiceScript,
+            files: [file],
+          };
+          if (navigator.canShare(shareData)) {
+            await navigator.share(shareData);
+            setSharing(false);
+            return;
+          }
+        } catch {
+          // If file sharing not supported, fall through to text-only share
+        }
+
+        // Text-only share
+        try {
+          await navigator.share({ text: voiceScript });
+          setSharing(false);
+          return;
+        } catch {
+          // User cancelled or not supported, fall through
+        }
+      }
+
+      // Fallback: open WhatsApp with text
+      const url = `https://wa.me/?text=${encodeURIComponent(voiceScript)}`;
+      window.open(url, "_blank", "noopener,noreferrer");
+    } finally {
+      setSharing(false);
+    }
+  }, [voiceScript]);
 
   return (
     <ResultCard
@@ -38,9 +127,10 @@ export default function VoiceScriptResult({
         <button
           type="button"
           onClick={handleShareWhatsApp}
-          className="text-xs bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded-full font-medium transition-colors"
+          disabled={sharing}
+          className="text-xs bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-3 py-1 rounded-full font-medium transition-colors"
         >
-          Share to WhatsApp
+          {sharing ? "Preparing..." : "Share to WhatsApp"}
         </button>
       }
     >

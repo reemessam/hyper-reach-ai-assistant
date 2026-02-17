@@ -11,53 +11,24 @@ interface SocialPostResultProps {
   copied: boolean;
 }
 
-type Platform = "twitter" | "facebook";
-
 export default function SocialPostResult({
   socialPost,
   severity,
   onCopy,
   copied,
 }: SocialPostResultProps) {
-  const [posting, setPosting] = useState<Platform | null>(null);
-  const [postStatus, setPostStatus] = useState<Record<Platform, "idle" | "posted" | "error">>({
-    twitter: "idle",
-    facebook: "idle",
-  });
+  const [fbCopied, setFbCopied] = useState(false);
 
-  async function handlePost(platform: Platform) {
-    setPosting(platform);
-    setPostStatus((prev) => ({ ...prev, [platform]: "idle" }));
-    try {
-      const res = await fetch("/api/post-social", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ platform, message: socialPost }),
-      });
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || "Failed to post");
-      }
-      setPostStatus((prev) => ({ ...prev, [platform]: "posted" }));
-      setTimeout(
-        () => setPostStatus((prev) => ({ ...prev, [platform]: "idle" })),
-        3000
+  function handleShareToFacebook() {
+    navigator.clipboard.writeText(socialPost).then(() => {
+      setFbCopied(true);
+      setTimeout(() => setFbCopied(false), 4000);
+      window.open(
+        "https://www.facebook.com/",
+        "_blank",
+        "noopener,noreferrer"
       );
-    } catch {
-      setPostStatus((prev) => ({ ...prev, [platform]: "error" }));
-      setTimeout(
-        () => setPostStatus((prev) => ({ ...prev, [platform]: "idle" })),
-        4000
-      );
-    } finally {
-      setPosting(null);
-    }
-  }
-
-  function statusLabel(platform: Platform): string | null {
-    if (postStatus[platform] === "posted") return "Posted!";
-    if (postStatus[platform] === "error") return "Failed. Check API keys.";
-    return null;
+    });
   }
 
   return (
@@ -77,50 +48,19 @@ export default function SocialPostResult({
       copied={copied}
       copyLabel="Copy Post"
       actions={
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            {/* Twitter / X */}
-            <button
-              type="button"
-              onClick={() => handlePost("twitter")}
-              disabled={posting !== null}
-              className="text-xs bg-gray-900 hover:bg-gray-800 disabled:opacity-50 text-white px-3 py-1 rounded-full font-medium transition-colors"
-            >
-              {posting === "twitter" ? "Posting..." : "Post to X"}
-            </button>
-            {statusLabel("twitter") && (
-              <span
-                className={`text-xs font-medium ${
-                  postStatus.twitter === "posted"
-                    ? "text-green-700"
-                    : "text-red-700"
-                }`}
-              >
-                {statusLabel("twitter")}
-              </span>
-            )}
-
-            {/* Facebook */}
-            <button
-              type="button"
-              onClick={() => handlePost("facebook")}
-              disabled={posting !== null}
-              className="text-xs bg-blue-700 hover:bg-blue-800 disabled:opacity-50 text-white px-3 py-1 rounded-full font-medium transition-colors"
-            >
-              {posting === "facebook" ? "Posting..." : "Post to Facebook"}
-            </button>
-            {statusLabel("facebook") && (
-              <span
-                className={`text-xs font-medium ${
-                  postStatus.facebook === "posted"
-                    ? "text-green-700"
-                    : "text-red-700"
-                }`}
-              >
-                {statusLabel("facebook")}
-              </span>
-            )}
-          </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            type="button"
+            onClick={handleShareToFacebook}
+            className="text-xs bg-blue-700 hover:bg-blue-800 text-white px-3 py-1 rounded-full font-medium transition-colors"
+          >
+            Share to Facebook
+          </button>
+          {fbCopied && (
+            <span className="text-xs font-medium text-green-700">
+              Copied! Paste it into your new Facebook post.
+            </span>
+          )}
         </div>
       }
     >
