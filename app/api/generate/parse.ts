@@ -30,12 +30,14 @@ export function sanitizeResponse(
   const translationsObj = raw.translations as
     | Record<string, unknown>
     | undefined;
-  const translations = {
-    es_sms:
-      typeof translationsObj?.es_sms === "string"
-        ? translationsObj.es_sms.slice(0, SMS_MAX_LENGTH)
-        : "",
-  };
+  const translations: Record<string, string> = {};
+  if (translationsObj && typeof translationsObj === "object") {
+    for (const [lang, val] of Object.entries(translationsObj)) {
+      if (typeof val === "string") {
+        translations[lang] = val.slice(0, SMS_MAX_LENGTH);
+      }
+    }
+  }
 
   const readability_grade_estimate =
     typeof raw.readability_grade_estimate === "number"

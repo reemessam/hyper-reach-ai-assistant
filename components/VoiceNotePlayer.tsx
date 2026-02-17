@@ -6,44 +6,108 @@ interface VoiceNotePlayerProps {
   text: string;
 }
 
+function formatTime(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
 export default function VoiceNotePlayer({ text }: VoiceNotePlayerProps) {
   const [supported, setSupported] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [totalSeconds, setTotalSeconds] = useState(0);
+
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const seekOffsetRef = useRef(0);
+  const totalLengthRef = useRef(0);
+  const lastBoundaryCharRef = useRef(0);
+  const startTimeRef = useRef(0);
   const animationRef = useRef<number | null>(null);
-  const startTimeRef = useRef<number>(0);
-  const durationRef = useRef<number>(0);
 
   useEffect(() => {
     setSupported(typeof window !== "undefined" && "speechSynthesis" in window);
   }, []);
 
-  const estimateDuration = useCallback((t: string): number => {
-    // Approximate: ~150 words per minute at rate=1
-    const words = t.split(/\s+/).length;
-    return (words / 150) * 60 * 1000; // ms
+  // Estimate total duration for display (approximate, updated during playback)
+  useEffect(() => {
+    const words = text.split(/\s+/).length;
+    setTotalSeconds(Math.ceil((words / 150) * 60));
+  }, [text]);
+
+  const cancelAnimation = useCallback(() => {
+    if (animationRef.current !== null) {
+      cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+    }
   }, []);
 
   const stopPlayback = useCallback(() => {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
-    if (animationRef.current !== null) {
-      cancelAnimationFrame(animationRef.current);
-      animationRef.current = null;
-    }
+    cancelAnimation();
+    utteranceRef.current = null;
+    seekOffsetRef.current = 0;
+    lastBoundaryCharRef.current = 0;
     setPlaying(false);
     setProgress(0);
-  }, []);
+    setElapsedSeconds(0);
+  }, [cancelAnimation]);
 
   const animateProgress = useCallback(() => {
-    const elapsed = Date.now() - startTimeRef.current;
-    const pct = Math.min((elapsed / durationRef.current) * 100, 100);
-    setProgress(pct);
-    if (pct < 100) {
+    const elapsed = (Date.now() - startTimeRef.current) / 1000;
+    setElapsedSeconds(Math.floor(seekOffsetRef.current / totalLengthRef.current * totalSeconds + elapsed));
+    animationRef.current = requestAnimationFrame(animateProgress);
+  }, [totalSeconds]);
+
+  const startSpeaking = useCallback(
+    (fromText: string, seekCharOffset: number) => {
+      window.speechSynthesis.cancel();
+      cancelAnimation();
+
+      totalLengthRef.current = text.length;
+      seekOffsetRef.current = seekCharOffset;
+      lastBoundaryCharRef.current = 0;
+
+      const utterance = new SpeechSynthesisUtterance(fromText);
+      utterance.rate = 1;
+      utterance.pitch = 1;
+      utteranceRef.current = utterance;
+
+      utterance.onboundary = (event: SpeechSynthesisEvent) => {
+        if (event.name === "word") {
+          lastBoundaryCharRef.current = event.charIndex;
+          const absoluteChar = seekCharOffset + event.charIndex;
+          const pct = (absoluteChar / totalLengthRef.current) * 100;
+          setProgress(Math.min(pct, 100));
+        }
+      };
+
+      utterance.onend = () => {
+        cancelAnimation();
+        setPlaying(false);
+        setProgress(100);
+        setElapsedSeconds(totalSeconds);
+        setTimeout(() => {
+          setProgress(0);
+          setElapsedSeconds(0);
+          seekOffsetRef.current = 0;
+        }, 1500);
+      };
+
+      utterance.onerror = () => {
+        stopPlayback();
+      };
+
+      startTimeRef.current = Date.now();
+      setPlaying(true);
       animationRef.current = requestAnimationFrame(animateProgress);
-    }
-  }, []);
+      window.speechSynthesis.speak(utterance);
+    },
+    [text, cancelAnimation, stopPlayback, animateProgress, totalSeconds]
+  );
 
   const togglePlayback = useCallback(() => {
     if (!supported) return;
@@ -53,34 +117,41 @@ export default function VoiceNotePlayer({ text }: VoiceNotePlayerProps) {
       return;
     }
 
-    window.speechSynthesis.cancel();
+    startSpeaking(text, 0);
+  }, [supported, playing, text, stopPlayback, startSpeaking]);
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1;
-    utterance.pitch = 1;
+  const handleSeek = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      if (!supported) return;
 
-    durationRef.current = estimateDuration(text);
-    startTimeRef.current = Date.now();
+      const rect = e.currentTarget.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const ratio = Math.max(0, Math.min(clickX / rect.width, 1));
+      const targetChar = Math.floor(ratio * text.length);
 
-    utterance.onend = () => {
-      setPlaying(false);
-      setProgress(100);
-      if (animationRef.current !== null) {
-        cancelAnimationFrame(animationRef.current);
-        animationRef.current = null;
+      // Find nearest word boundary (space) to avoid splitting mid-word
+      let seekIndex = targetChar;
+      if (seekIndex > 0 && seekIndex < text.length) {
+        // Look backward for nearest space
+        const prevSpace = text.lastIndexOf(" ", seekIndex);
+        if (prevSpace !== -1) {
+          seekIndex = prevSpace + 1;
+        }
       }
-      setTimeout(() => setProgress(0), 1500);
-    };
 
-    utterance.onerror = () => {
-      stopPlayback();
-    };
+      const remainingText = text.slice(seekIndex);
+      if (!remainingText.trim()) {
+        stopPlayback();
+        return;
+      }
 
-    setPlaying(true);
-    animationRef.current = requestAnimationFrame(animateProgress);
-    window.speechSynthesis.speak(utterance);
-  }, [supported, playing, text, stopPlayback, estimateDuration, animateProgress]);
+      setProgress(ratio * 100);
+      startSpeaking(remainingText, seekIndex);
+    },
+    [supported, text, stopPlayback, startSpeaking]
+  );
 
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       stopPlayback();
@@ -100,37 +171,36 @@ export default function VoiceNotePlayer({ text }: VoiceNotePlayerProps) {
         aria-label={playing ? "Stop voice playback" : "Play voice note"}
       >
         {playing ? (
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 12 12"
-            fill="currentColor"
-          >
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
             <rect x="1" y="1" width="10" height="10" rx="1" />
           </svg>
         ) : (
-          <svg
-            width="12"
-            height="14"
-            viewBox="0 0 12 14"
-            fill="currentColor"
-          >
+          <svg width="12" height="14" viewBox="0 0 12 14" fill="currentColor">
             <path d="M1 1.5v11l10-5.5L1 1.5z" />
           </svg>
         )}
       </button>
 
-      <div className="flex-1 h-1 bg-gray-300 rounded-full overflow-hidden">
+      {/* Clickable progress bar for seeking */}
+      <div
+        role="progressbar"
+        aria-valuenow={Math.round(progress)}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label="Voice playback progress. Click to seek."
+        className="flex-1 h-1.5 bg-gray-300 rounded-full overflow-hidden cursor-pointer"
+        onClick={handleSeek}
+      >
         <div
           className="h-full bg-blue-600 rounded-full transition-all duration-100"
           style={{ width: `${progress}%` }}
         />
       </div>
 
-      <span className="text-xs text-gray-500 shrink-0 w-8 text-right">
+      <span className="text-xs text-gray-500 shrink-0 tabular-nums">
         {playing
-          ? `${Math.ceil(((100 - progress) / 100) * estimateDuration(text) / 1000)}s`
-          : `${Math.ceil(estimateDuration(text) / 1000)}s`}
+          ? `${formatTime(elapsedSeconds)} / ${formatTime(totalSeconds)}`
+          : formatTime(totalSeconds)}
       </span>
     </div>
   );

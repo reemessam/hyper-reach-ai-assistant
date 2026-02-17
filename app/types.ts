@@ -36,9 +36,7 @@ export interface GenerateResponse {
     body: string;
   };
   social_post: string;
-  translations: {
-    es_sms: string;
-  };
+  translations: Record<string, string>;
   readability_grade_estimate: number;
   compliance_flags: string[];
   follow_up_suggestion: string;

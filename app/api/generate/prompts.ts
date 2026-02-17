@@ -53,7 +53,7 @@ Return STRICT JSON with this exact schema:
   "voice_script": "...",
   "email": { "subject": "...", "body": "..." },
   "social_post": "...",
-  "translations": { "es_sms": "..." },
+  "translations": { "es": "...", "fr": "...", "ar": "...", "zh": "...", "hi": "..." },
   "readability_grade_estimate": ${ctx.readingLevel},
   "compliance_flags": [],
   "follow_up_suggestion": "..."
