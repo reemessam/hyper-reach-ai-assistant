@@ -31,11 +31,11 @@ export default function Home() {
         {/* Header with logo */}
         <div className="flex flex-col items-center mb-8">
           <Image
-            src="/images/hyper-reach-logo.jpg"
+            src="/images/hyper-reach-logo.png"
             alt="Hyper Reach logo"
-            width={64}
-            height={64}
-            className="rounded-lg mb-3"
+            width={200}
+            height={60}
+            className="mb-3"
             priority
           />
           <h1 className="text-3xl font-bold text-gray-900 text-balance text-center">
