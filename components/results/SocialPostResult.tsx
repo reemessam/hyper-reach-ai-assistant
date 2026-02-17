@@ -24,7 +24,7 @@ export default function SocialPostResult({
       setFbCopied(true);
       setTimeout(() => setFbCopied(false), 4000);
       window.open(
-        "https://www.facebook.com/",
+          `https://www.facebook.com/sharer/sharer.php?quote=${encodeURIComponent(socialPost)}`,
         "_blank",
         "noopener,noreferrer"
       );
