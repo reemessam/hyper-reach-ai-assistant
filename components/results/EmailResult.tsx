@@ -10,20 +10,23 @@ interface EmailResultProps {
   severity: SeverityLevel;
   onCopy: () => void;
   copied: boolean;
+  mapUrl?: string;
 }
 
-export default function EmailResult({ email, severity, onCopy, copied }: EmailResultProps) {
+export default function EmailResult({ email, severity, onCopy, copied, mapUrl }: EmailResultProps) {
   const [sending, setSending] = useState(false);
   const [sendStatus, setSendStatus] = useState<"idle" | "sent" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [recipient, setRecipient] = useState("");
+
+  const bodyWithMap = mapUrl ? `${email.body}\n\nLocation: ${mapUrl}` : email.body;
 
   async function handleSendEmail() {
     setSending(true);
     setSendStatus("idle");
     setErrorMsg("");
 
-    const result = await sendEmail(email.subject, email.body, recipient.trim() || undefined);
+    const result = await sendEmail(email.subject, bodyWithMap, recipient.trim() || undefined);
 
     setSending(false);
     if (result.ok) {
@@ -37,7 +40,7 @@ export default function EmailResult({ email, severity, onCopy, copied }: EmailRe
   }
 
   function handleOpenMailClient() {
-    const mailto = `mailto:${encodeURIComponent(recipient.trim())}?subject=${encodeURIComponent(email.subject)}&body=${encodeURIComponent(email.body)}`;
+    const mailto = `mailto:${encodeURIComponent(recipient.trim())}?subject=${encodeURIComponent(email.subject)}&body=${encodeURIComponent(bodyWithMap)}`;
     window.open(mailto, "_blank");
   }
 
@@ -104,6 +107,21 @@ export default function EmailResult({ email, severity, onCopy, copied }: EmailRe
             {email.body}
           </div>
         </div>
+        {mapUrl && (
+          <div className="mt-1 px-1">
+            <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Location</span>
+            <p className="mt-1 text-sm">
+              <a
+                href={mapUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 hover:text-blue-800 hover:underline break-all"
+              >
+                View on Google Maps
+              </a>
+            </p>
+          </div>
+        )}
       </div>
     </ResultCard>
   );

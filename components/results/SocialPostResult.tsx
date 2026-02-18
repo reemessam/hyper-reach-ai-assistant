@@ -10,6 +10,7 @@ interface SocialPostResultProps {
   severity: SeverityLevel;
   onCopy: () => void;
   copied: boolean;
+  mapUrl?: string;
 }
 
 export default function SocialPostResult({
@@ -17,20 +18,23 @@ export default function SocialPostResult({
   severity,
   onCopy,
   copied,
+  mapUrl,
 }: SocialPostResultProps) {
   const [shareNotice, setShareNotice] = useState<string | null>(null);
 
+  const postWithMap = mapUrl ? `${socialPost}\n${mapUrl}` : socialPost;
+
   function handleShareTwitter() {
-    const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(socialPost)}`;
+    const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(postWithMap)}`;
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
   async function handleShareFacebook() {
-    await copyText(socialPost);
+    await copyText(postWithMap);
     setShareNotice("Content copied! Paste it in Facebook.");
     setTimeout(() => setShareNotice(null), 4000);
     window.open(
-      `https://www.facebook.com/sharer/sharer.php?quote=${encodeURIComponent(socialPost)}`,
+      `https://www.facebook.com/sharer/sharer.php?quote=${encodeURIComponent(postWithMap)}`,
       "_blank",
       "noopener,noreferrer"
     );
@@ -79,6 +83,18 @@ export default function SocialPostResult({
       <div className="bg-white/60 rounded-md p-3 text-sm text-gray-800 whitespace-pre-line">
         {socialPost}
       </div>
+      {mapUrl && (
+        <p className="mt-1 px-3 text-xs">
+          <a
+            href={mapUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:text-blue-800 hover:underline break-all"
+          >
+            {mapUrl}
+          </a>
+        </p>
+      )}
     </ResultCard>
   );
 }

@@ -10,20 +10,23 @@ interface SmsResultProps {
   severity: SeverityLevel;
   onCopy: () => void;
   copied: boolean;
+  mapUrl?: string;
 }
 
-export default function SmsResult({ sms, severity, onCopy, copied }: SmsResultProps) {
+export default function SmsResult({ sms, severity, onCopy, copied, mapUrl }: SmsResultProps) {
   const [sending, setSending] = useState(false);
   const [sendStatus, setSendStatus] = useState<"idle" | "sent" | "error">("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [recipient, setRecipient] = useState("");
+
+  const smsWithMap = mapUrl ? `${sms}\n${mapUrl}` : sms;
 
   async function handleSendSms() {
     setSending(true);
     setSendStatus("idle");
     setErrorMsg("");
 
-    const result = await sendSms(sms, recipient.trim() || undefined);
+    const result = await sendSms(smsWithMap, recipient.trim() || undefined);
 
     setSending(false);
     if (result.ok) {
@@ -90,6 +93,18 @@ export default function SmsResult({ sms, severity, onCopy, copied }: SmsResultPr
       <p className="text-gray-800 bg-white/60 rounded-md p-3 text-sm font-mono">
         {sms}
       </p>
+      {mapUrl && (
+        <p className="mt-1 px-3 text-xs">
+          <a
+            href={mapUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:text-blue-800 hover:underline break-all"
+          >
+            {mapUrl}
+          </a>
+        </p>
+      )}
     </ResultCard>
   );
 }
