@@ -81,6 +81,21 @@ export default function IncidentSidebar({
             </div>
             <p className="text-xs text-gray-500 truncate mt-0.5">
               {incident.location}
+              {incident.mapUrl && (
+                <a
+                  href={incident.mapUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  className="ml-1 text-blue-500 hover:text-blue-700"
+                  title="View on map"
+                >
+                  <svg className="inline w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+                    <circle cx="12" cy="10" r="3" />
+                  </svg>
+                </a>
+              )}
             </p>
             <p className="text-[10px] text-gray-400 mt-0.5">
               {created.toLocaleDateString(undefined, {

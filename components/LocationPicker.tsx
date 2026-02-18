@@ -5,6 +5,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 interface LocationPickerProps {
   value: string;
   onChange: (value: string) => void;
+  mapUrl: string;
+  onMapUrlChange: (url: string) => void;
   id?: string;
   placeholder?: string;
   className?: string;
@@ -49,9 +51,34 @@ function loadGoogleMaps(apiKey: string): Promise<void> {
   });
 }
 
+function isValidUrl(str: string): boolean {
+  try {
+    const url = new URL(str);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function isGoogleMapsUrl(str: string): boolean {
+  if (!isValidUrl(str)) return false;
+  try {
+    const url = new URL(str);
+    return (
+      url.hostname.includes("google.com") ||
+      url.hostname.includes("goo.gl") ||
+      url.hostname.includes("maps.app.goo.gl")
+    );
+  } catch {
+    return false;
+  }
+}
+
 export default function LocationPicker({
   value,
   onChange,
+  mapUrl,
+  onMapUrlChange,
   id,
   placeholder,
   className,
@@ -90,6 +117,12 @@ export default function LocationPicker({
         } else if (place.name) {
           onChange(place.name);
         }
+        // Auto-set map URL from the place
+        if (place.url) {
+          onMapUrlChange(place.url);
+        } else if (place.place_id) {
+          onMapUrlChange(`https://www.google.com/maps/place/?q=place_id:${place.place_id}`);
+        }
       });
 
       autocompleteRef.current = autocomplete;
@@ -98,7 +131,7 @@ export default function LocationPicker({
     return () => {
       mounted = false;
     };
-  }, [hasApiKey, apiKey, onChange]);
+  }, [hasApiKey, apiKey, onChange, onMapUrlChange]);
 
   // Initialize map when modal opens
   useEffect(() => {
@@ -109,7 +142,7 @@ export default function LocationPicker({
     loadGoogleMaps(apiKey!).then(() => {
       if (!mounted || !mapContainerRef.current) return;
 
-      const center = mapCenter || { lat: 39.8283, lng: -98.5795 }; // US center default
+      const center = mapCenter || { lat: 39.8283, lng: -98.5795 };
 
       const map = new google.maps.Map(mapContainerRef.current, {
         center,
@@ -120,7 +153,6 @@ export default function LocationPicker({
       mapInstanceRef.current = map;
       geocoderRef.current = new google.maps.Geocoder();
 
-      // Add marker if we have a center
       if (mapCenter) {
         const marker = new google.maps.Marker({
           position: mapCenter,
@@ -135,13 +167,13 @@ export default function LocationPicker({
             geocoderRef.current.geocode({ location: pos }, (results, status) => {
               if (status === "OK" && results && results[0]) {
                 onChange(results[0].formatted_address);
+                onMapUrlChange(`https://www.google.com/maps?q=${pos.lat()},${pos.lng()}`);
               }
             });
           }
         });
       }
 
-      // Click on map to place/move marker
       map.addListener("click", (e: google.maps.MapMouseEvent) => {
         const latLng = e.latLng;
         if (!latLng) return;
@@ -162,6 +194,7 @@ export default function LocationPicker({
               geocoderRef.current.geocode({ location: pos }, (results, status) => {
                 if (status === "OK" && results && results[0]) {
                   onChange(results[0].formatted_address);
+                  onMapUrlChange(`https://www.google.com/maps?q=${pos.lat()},${pos.lng()}`);
                 }
               });
             }
@@ -172,6 +205,7 @@ export default function LocationPicker({
           geocoderRef.current.geocode({ location: latLng }, (results, status) => {
             if (status === "OK" && results && results[0]) {
               onChange(results[0].formatted_address);
+              onMapUrlChange(`https://www.google.com/maps?q=${latLng.lat()},${latLng.lng()}`);
             }
           });
         }
@@ -183,11 +217,10 @@ export default function LocationPicker({
       mapInstanceRef.current = null;
       markerRef.current = null;
     };
-  }, [mapOpen, hasApiKey, apiKey, mapCenter, onChange]);
+  }, [mapOpen, hasApiKey, apiKey, mapCenter, onChange, onMapUrlChange]);
 
   const handleOpenMap = useCallback(() => {
     if (!hasApiKey) {
-      // No API key — open Google Maps in a new tab
       const query = value.trim() || "";
       const url = query
         ? `https://www.google.com/maps/search/${encodeURIComponent(query)}`
@@ -196,7 +229,6 @@ export default function LocationPicker({
       return;
     }
 
-    // Try geocoding current value to center map
     if (value.trim() && googleMapsLoaded) {
       const geocoder = new google.maps.Geocoder();
       geocoder.geocode({ address: value.trim() }, (results, status) => {
@@ -213,7 +245,8 @@ export default function LocationPicker({
   }, [hasApiKey, value]);
 
   return (
-    <div>
+    <div className="space-y-2">
+      {/* Location text input + Map button */}
       <div className="flex gap-2">
         <input
           ref={inputRef}
@@ -240,7 +273,49 @@ export default function LocationPicker({
         </button>
       </div>
 
-      {/* Map modal */}
+      {/* Map link input */}
+      <div>
+        <div className="flex items-center gap-2">
+          <input
+            type="url"
+            value={mapUrl}
+            onChange={(e) => onMapUrlChange(e.target.value)}
+            placeholder="Paste Google Maps link here (optional)"
+            className="w-full text-sm rounded-md border border-gray-200 px-3 py-1.5 text-gray-700 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none"
+          />
+        </div>
+        {mapUrl && isGoogleMapsUrl(mapUrl) && (
+          <a
+            href={mapUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 mt-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z" />
+              <circle cx="12" cy="10" r="3" />
+            </svg>
+            View on Google Maps
+          </a>
+        )}
+        {mapUrl && isValidUrl(mapUrl) && !isGoogleMapsUrl(mapUrl) && (
+          <a
+            href={mapUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 mt-1 text-xs text-blue-600 hover:text-blue-800 hover:underline"
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+              <polyline points="15 3 21 3 21 9" />
+              <line x1="10" y1="14" x2="21" y2="3" />
+            </svg>
+            Open map link
+          </a>
+        )}
+      </div>
+
+      {/* Map modal (API key only) */}
       {mapOpen && hasApiKey && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl mx-4 overflow-hidden">

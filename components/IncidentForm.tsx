@@ -25,6 +25,7 @@ export default function IncidentForm({ onSubmit, loading }: IncidentFormProps) {
     INCIDENT_TYPES[0]
   );
   const [location, setLocation] = useState("");
+  const [mapUrl, setMapUrl] = useState("");
   const [severity, setSeverity] = useState<SeverityLevel>("Medium");
   const [confirmedFacts, setConfirmedFacts] = useState("");
   const [requiredAction, setRequiredAction] = useState("");
@@ -53,6 +54,7 @@ export default function IncidentForm({ onSubmit, loading }: IncidentFormProps) {
     onSubmit({
       incidentType,
       location,
+      mapUrl: mapUrl.trim() || undefined,
       severity,
       confirmedFacts,
       requiredAction: requiredAction.trim() || undefined,
@@ -117,6 +119,8 @@ export default function IncidentForm({ onSubmit, loading }: IncidentFormProps) {
           <LocationPicker
             id="location"
             value={location}
+            mapUrl={mapUrl}
+            onMapUrlChange={setMapUrl}
             onChange={(val) => {
               setLocation(val);
               if (submitted) {
