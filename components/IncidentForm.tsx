@@ -8,6 +8,7 @@ import type {
   Tone,
 } from "@/app/types";
 import { INCIDENT_TYPES, SEVERITY_LEVELS, TONE_OPTIONS } from "@/app/types";
+import LocationPicker from "@/components/LocationPicker";
 
 interface IncidentFormProps {
   onSubmit: (data: GenerateRequest) => void;
@@ -113,17 +114,15 @@ export default function IncidentForm({ onSubmit, loading }: IncidentFormProps) {
               *
             </span>
           </label>
-          <input
+          <LocationPicker
             id="location"
-            type="text"
-            required
             value={location}
-            onChange={(e) => {
-              setLocation(e.target.value);
+            onChange={(val) => {
+              setLocation(val);
               if (submitted) {
                 setErrors((prev) => ({
                   ...prev,
-                  location: e.target.value.trim()
+                  location: val.trim()
                     ? undefined
                     : "Location is required.",
                 }));
