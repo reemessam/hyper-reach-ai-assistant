@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { IncidentRecord, IncidentLifecycleData } from "@/app/types";
+import { sendSms, sendEmail } from "@/lib/actions";
 
 interface Props {
   incident: IncidentRecord;
@@ -25,6 +26,13 @@ export default function IncidentLifecycleTimeline({
   const sender = incident.sender;
   const followUpSuggestion = outputs.follow_up_suggestion;
 
+  // All-clear send state
+  const [allClearSending, setAllClearSending] = useState(false);
+  const [allClearSendStatus, setAllClearSendStatus] = useState<"idle" | "sent" | "error">("idle");
+  const [allClearError, setAllClearError] = useState("");
+  const [allClearSmsTo, setAllClearSmsTo] = useState("");
+  const [allClearEmailTo, setAllClearEmailTo] = useState("");
+
   useEffect(() => {
     const interval = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(interval);
@@ -40,6 +48,8 @@ export default function IncidentLifecycleTimeline({
   const isAllClearGenerated = !!lifecycle.allClearGeneratedAt;
   const isResolved = !!lifecycle.resolvedAt;
 
+  const allClearMessage = `All clear: The situation has been resolved. ${sms.slice(0, 80)}... - ${sender}`;
+
   function handleMarkFollowUpSent() {
     onUpdateLifecycle(id, { followUpSentAt: new Date().toISOString() });
   }
@@ -52,6 +62,40 @@ export default function IncidentLifecycleTimeline({
 
   function handleMarkResolved() {
     onUpdateLifecycle(id, { resolvedAt: new Date().toISOString() });
+  }
+
+  async function handleSendAllClear() {
+    setAllClearSending(true);
+    setAllClearSendStatus("idle");
+    setAllClearError("");
+
+    const [smsResult, emailResult] = await Promise.all([
+      sendSms(allClearMessage, allClearSmsTo.trim() || undefined),
+      sendEmail(
+        `All Clear: ${incident.incidentType} at ${incident.location}`,
+        allClearMessage,
+        allClearEmailTo.trim() || undefined
+      ),
+    ]);
+
+    setAllClearSending(false);
+
+    const errors: string[] = [];
+    if (!smsResult.ok) errors.push(`SMS: ${smsResult.error}`);
+    if (!emailResult.ok) errors.push(`Email: ${emailResult.error}`);
+
+    if (errors.length === 0) {
+      setAllClearSendStatus("sent");
+      setTimeout(() => setAllClearSendStatus("idle"), 4000);
+    } else if (smsResult.ok || emailResult.ok) {
+      setAllClearError(errors.join(" | "));
+      setAllClearSendStatus("sent");
+      setTimeout(() => { setAllClearSendStatus("idle"); setAllClearError(""); }, 5000);
+    } else {
+      setAllClearError(errors.join(" | "));
+      setAllClearSendStatus("error");
+      setTimeout(() => { setAllClearSendStatus("idle"); setAllClearError(""); }, 5000);
+    }
   }
 
   const initialTime = new Date(lifecycle.initialSentAt);
@@ -152,9 +196,51 @@ export default function IncidentLifecycleTimeline({
                   minute: "2-digit",
                 })}
               </p>
-              <p className="text-sm text-gray-700 mt-1">
-                {`All clear: The situation has been resolved. ${sms.slice(0, 50)}... - ${sender}`}
-              </p>
+              <p className="text-sm text-gray-700 mt-1">{allClearMessage}</p>
+
+              {/* Send All Clear */}
+              {!isResolved && (
+                <div className="mt-3 space-y-2 bg-gray-50 rounded-md p-3">
+                  <p className="text-xs font-medium text-gray-600 uppercase tracking-wide">
+                    Send All Clear via SMS & Email
+                  </p>
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="tel"
+                      value={allClearSmsTo}
+                      onChange={(e) => setAllClearSmsTo(e.target.value)}
+                      placeholder="Phone (optional)"
+                      className="text-sm border border-gray-300 rounded-md px-2 py-1 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none flex-1"
+                    />
+                    <input
+                      type="email"
+                      value={allClearEmailTo}
+                      onChange={(e) => setAllClearEmailTo(e.target.value)}
+                      placeholder="Email (optional)"
+                      className="text-sm border border-gray-300 rounded-md px-2 py-1 text-gray-900 placeholder-gray-400 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none flex-1"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSendAllClear}
+                      disabled={allClearSending}
+                      className="text-xs bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-md font-medium transition-colors"
+                    >
+                      {allClearSending ? "Sending..." : "Send All Clear"}
+                    </button>
+                    {allClearSendStatus === "sent" && !allClearError && (
+                      <span className="text-xs text-green-700 font-medium">Sent!</span>
+                    )}
+                    {allClearSendStatus === "sent" && allClearError && (
+                      <span className="text-xs text-amber-700 font-medium">Partially sent: {allClearError}</span>
+                    )}
+                    {allClearSendStatus === "error" && (
+                      <span className="text-xs text-red-700 font-medium">{allClearError}</span>
+                    )}
+                  </div>
+                </div>
+              )}
             </>
           ) : (
             <>

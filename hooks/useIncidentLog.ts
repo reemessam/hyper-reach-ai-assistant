@@ -74,6 +74,7 @@ export function useIncidentLog() {
         createdAt: now,
         incidentType: request.incidentType,
         location: request.location,
+        mapUrl: request.mapUrl || undefined,
         severity: request.severity,
         tone: request.tone ?? "Neutral",
         sender: request.sender ?? "Emergency Management Office",

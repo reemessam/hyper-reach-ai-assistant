@@ -214,34 +214,36 @@ export default function IncidentDetail({
           <SmsResult
             sms={result.sms}
             severity={severity}
-            onCopy={() => copyToClipboard(result.sms, "sms")}
+            onCopy={() => copyToClipboard(incident.mapUrl ? `${result.sms}\n${incident.mapUrl}` : result.sms, "sms")}
             copied={copiedField === "sms"}
+            mapUrl={incident.mapUrl}
           />
 
           <VoiceScriptResult
             voiceScript={result.voice_script}
             severity={severity}
-            onCopy={() => copyToClipboard(result.voice_script, "voice")}
+            onCopy={() => copyToClipboard(incident.mapUrl ? `${result.voice_script}\n\nLocation: ${incident.mapUrl}` : result.voice_script, "voice")}
             copied={copiedField === "voice"}
+            mapUrl={incident.mapUrl}
           />
 
           <EmailResult
             email={result.email}
             severity={severity}
-            onCopy={() =>
-              copyToClipboard(
-                `Subject: ${result.email.subject}\n\n${result.email.body}`,
-                "email"
-              )
-            }
+            onCopy={() => {
+              const body = incident.mapUrl ? `${result.email.body}\n\nLocation: ${incident.mapUrl}` : result.email.body;
+              copyToClipboard(`Subject: ${result.email.subject}\n\n${body}`, "email");
+            }}
             copied={copiedField === "email"}
+            mapUrl={incident.mapUrl}
           />
 
           <SocialPostResult
             socialPost={result.social_post}
             severity={severity}
-            onCopy={() => copyToClipboard(result.social_post, "social")}
+            onCopy={() => copyToClipboard(incident.mapUrl ? `${result.social_post}\n${incident.mapUrl}` : result.social_post, "social")}
             copied={copiedField === "social"}
+            mapUrl={incident.mapUrl}
           />
 
           <TranslationResult

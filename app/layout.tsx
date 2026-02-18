@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Hyper Reach - AI Crisis Message Generator",
+  title: "Hyper Reach - AI Crisis Communication Copilot",
   description:
-    "Generate structured emergency SMS and email communications from confirmed incident details.",
+    "An AI lifecycle engine for emergency messaging — from first alert to all-clear",
 };
 
 export const viewport: Viewport = {

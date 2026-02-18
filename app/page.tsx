@@ -45,11 +45,10 @@ export default function Home() {
           />
           <div>
             <h1 className="text-xl font-bold text-gray-900 text-balance">
-              Hyper Reach AI Crisis Message Generator
+              Hyper Reach - AI Crisis Communication Copilot
             </h1>
             <p className="text-sm text-gray-600 text-pretty">
-              Generate structured emergency communications from confirmed
-              incident details.
+              An AI lifecycle engine for emergency messaging — from first alert to all-clear
             </p>
           </div>
         </div>

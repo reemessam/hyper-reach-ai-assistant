@@ -9,6 +9,7 @@ interface VoiceScriptResultProps {
   severity: SeverityLevel;
   onCopy: () => void;
   copied: boolean;
+  mapUrl?: string;
 }
 
 export default function VoiceScriptResult({
@@ -16,9 +17,12 @@ export default function VoiceScriptResult({
   severity,
   onCopy,
   copied,
+  mapUrl,
 }: VoiceScriptResultProps) {
+  const scriptWithMap = mapUrl ? `${voiceScript}\n\nLocation: ${mapUrl}` : voiceScript;
+
   function handleShareWhatsApp() {
-    const url = `https://wa.me/?text=${encodeURIComponent(voiceScript)}`;
+    const url = `https://wa.me/?text=${encodeURIComponent(scriptWithMap)}`;
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
@@ -49,6 +53,18 @@ export default function VoiceScriptResult({
       <div className="bg-white/60 rounded-md p-3 text-sm text-gray-800 whitespace-pre-line">
         {voiceScript}
       </div>
+      {mapUrl && (
+        <p className="mt-1 px-3 text-xs">
+          <a
+            href={mapUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 hover:text-blue-800 hover:underline break-all"
+          >
+            View on Google Maps
+          </a>
+        </p>
+      )}
       <VoiceNotePlayer text={voiceScript} />
     </ResultCard>
   );

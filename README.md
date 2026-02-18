@@ -1,4 +1,4 @@
-# AI Crisis Message Generator
+# AI Crisis Communication Copilot
 
 Generate structured emergency SMS and email communications from confirmed incident details.
 

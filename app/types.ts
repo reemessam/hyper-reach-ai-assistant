@@ -19,6 +19,7 @@ export type Tone = (typeof TONE_OPTIONS)[number];
 export interface GenerateRequest {
   incidentType: IncidentType;
   location: string;
+  mapUrl?: string;
   severity: SeverityLevel;
   confirmedFacts: string;
   requiredAction?: string;
@@ -99,6 +100,7 @@ export interface IncidentRecord {
   createdAt: string;
   incidentType: IncidentType;
   location: string;
+  mapUrl?: string;
   severity: SeverityLevel;
   tone: Tone;
   sender: string;

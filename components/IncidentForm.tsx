@@ -8,6 +8,7 @@ import type {
   Tone,
 } from "@/app/types";
 import { INCIDENT_TYPES, SEVERITY_LEVELS, TONE_OPTIONS } from "@/app/types";
+import LocationPicker from "@/components/LocationPicker";
 
 interface IncidentFormProps {
   onSubmit: (data: GenerateRequest) => void;
@@ -24,6 +25,7 @@ export default function IncidentForm({ onSubmit, loading }: IncidentFormProps) {
     INCIDENT_TYPES[0]
   );
   const [location, setLocation] = useState("");
+  const [mapUrl, setMapUrl] = useState("");
   const [severity, setSeverity] = useState<SeverityLevel>("Medium");
   const [confirmedFacts, setConfirmedFacts] = useState("");
   const [requiredAction, setRequiredAction] = useState("");
@@ -52,6 +54,7 @@ export default function IncidentForm({ onSubmit, loading }: IncidentFormProps) {
     onSubmit({
       incidentType,
       location,
+      mapUrl: mapUrl.trim() || undefined,
       severity,
       confirmedFacts,
       requiredAction: requiredAction.trim() || undefined,
@@ -113,17 +116,17 @@ export default function IncidentForm({ onSubmit, loading }: IncidentFormProps) {
               *
             </span>
           </label>
-          <input
+          <LocationPicker
             id="location"
-            type="text"
-            required
             value={location}
-            onChange={(e) => {
-              setLocation(e.target.value);
+            mapUrl={mapUrl}
+            onMapUrlChange={setMapUrl}
+            onChange={(val) => {
+              setLocation(val);
               if (submitted) {
                 setErrors((prev) => ({
                   ...prev,
-                  location: e.target.value.trim()
+                  location: val.trim()
                     ? undefined
                     : "Location is required.",
                 }));
